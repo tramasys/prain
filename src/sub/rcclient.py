@@ -67,8 +67,7 @@ def rc_client(host: str = "localhost", port: int = 5000) -> None:
                     col += 1
 
                 send_col = 4 if cmd == "stop" else col
-                send_btn = ttk.Button(self.command_frame, text="Send",
-                                     command=lambda c=cmd: self.send_command(c))
+                send_btn = ttk.Button(self.command_frame, text="Send", command=lambda c=cmd: self.send_command(c))
                 send_btn.grid(row=row, column=send_col, padx=5, pady=5)
 
             self.log_frame = ttk.LabelFrame(self.main_frame, text="Command Log", padding="5")
@@ -97,6 +96,7 @@ def rc_client(host: str = "localhost", port: int = 5000) -> None:
                         s.connect((self.host, self.port))
                         s.sendall(command_str.encode() + b"\n")
                         response = s.recv(1024).decode().strip()
+
                 self.add_to_log(response)
             except Exception as e:
                 self.add_to_log(f"Error: {e}")
