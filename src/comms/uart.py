@@ -6,9 +6,11 @@ class UartInterface:
     def __init__(self, port: str, baudrate: int = 115200):
         self.serial = serial.Serial(port, baudrate, timeout=1)
 
+    @property
     def port(self) -> str:
         return self.serial.portstr
 
+    @property
     def baudrate(self) -> int:
         return self.serial.baudrate
 

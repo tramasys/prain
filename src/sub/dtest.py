@@ -4,9 +4,9 @@ from prain_uart import *
 
 def print_frame(frame: Frame) -> None:
     decoder = Decoder(frame)
-    print(f"Frame: {decoder.address()}")
-    print(f"Command: {decoder.command()}")
-    print(f"CRC valid: {decoder.is_crc_valid()}")
+    print(f"Address: {decoder.address.name} ({decoder.address.value})")
+    print(f"Command: {decoder.command.name} ({decoder.command.value})")
+    print(f"CRC valid: {decoder.verify_crc()}")
 
     try:
         params = decoder.get_params()
@@ -37,8 +37,8 @@ def print_frame(frame: Frame) -> None:
     except ValueError as e:
         print(f"Error decoding params: {e}")
 
-def decode_loop(uart_interface: UartInterface) -> None:
-    print(f"Starting UART decode loop on {uart_interface.port()} at {uart_interface.baudrate()} baud")
+def decode_test(uart_interface: UartInterface) -> None:
+    print(f"Starting UART decode loop on {uart_interface.port} at {uart_interface.baudrate} baud")
 
     try:
         while True:
