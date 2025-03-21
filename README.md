@@ -2,6 +2,25 @@
 
 The brain of our self driving vehicle ...
 
+## Test UART locally
+```bash
+socat -d -d pty,raw,echo=0 pty,raw,echo=0
+```
+And then use the created virtual character devices as the port to start the program.
+
+## Set up remote control server
+On the PI:
+```bash
+python src/main.py -s rcserver -p <uart port>
+```
+
+On the client:
+```bash
+python src/main -s rcclient
+```
+
+This opens a window, where you can send commands to the PI.
+
 ## Problems
 If you get the following error:
 ```bash
