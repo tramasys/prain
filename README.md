@@ -21,9 +21,9 @@ And then use the created virtual character devices as the UART port to start the
 ## Set up remote control server
 On the PI:
 ```bash
-python src/main.py -s rcserver -p <uart port>
+python src/main.py -s rcserver -u <uart>
 ```
-This sets up a server (host and port can be passed via --host and --server-port).
+This sets up a server (host and port can be passed via --host and --port).
 The server listens to commands and then writes them to the UART port via execute_command.
 
 On the client:
