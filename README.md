@@ -2,6 +2,15 @@
 
 The brain of our self driving vehicle ...
 
+## Getting the library
+We depend on our `prain_uart` library:
+```bash
+git clone git@github.com:tramasys/prain_uart_python.git
+cd prain_uart_python
+pip install -e .
+pip show prain_uart # check if installed on machine
+```
+
 ## Test UART locally (Linux)
 Use this to create a non-slaved virtual serial-port character device:
 ```bash
