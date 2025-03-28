@@ -8,13 +8,13 @@ def lidar_test(bus: int, address: int = 0x10) -> None:
     lidar.start()
 
     try:
-        for i in range(10):
+        while True:
             dist, flux, temp = lidar.get_data()
 
             if dist is None:
                 print("No LiDAR data yet...")
             else:
-                print(f"Distance: {dist} cm, Flux: {flux}, Temp (raw): {temp}")
+                print(f"distance: {dist} cm, flux: {flux}, temp (raw): {temp}")
             time.sleep(0.5)
 
     except KeyboardInterrupt:
