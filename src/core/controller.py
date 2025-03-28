@@ -32,7 +32,7 @@ class HighLevelController:
         while self.keep_running:
             # 1) get sensor data
             frame = self.camera.get_latest_frame()
-            lidar_data = self.lidar.get_data()
+            lidar_data = self.lidar.get_data() # we get (dist_cm, flux, temp)
             sensor_data = {
                 "frame": frame,
                 "lidar": lidar_data,
