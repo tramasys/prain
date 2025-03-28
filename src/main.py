@@ -2,6 +2,7 @@ import time
 from utils.logging import setup_logging
 from sub.dtest import decode_test
 from sub.etest import encode_test
+from sub.ldtest import lidar_test
 from sub.rc import rc_server
 from sub.rcclient import rc_client
 from cli import parse_args
@@ -52,6 +53,7 @@ def main():
         "dtest":    run_dtest,
         "etest":    run_etest,
         "rcserver": run_rcserver,
+        "ldtest":   lambda: lidar_test(args.lidar, args.lidar_baudrate),
         None:       lambda: main_loop(args),
     }
 
