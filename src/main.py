@@ -53,7 +53,7 @@ def main():
         "dtest":    run_dtest,
         "etest":    run_etest,
         "rcserver": run_rcserver,
-        "ldtest":   lambda: lidar_test(args.lidar, args.lidar_baudrate),
+        "ldtest":   lambda: lidar_test(args.lidar),
         None:       lambda: main_loop(args),
     }
 
