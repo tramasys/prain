@@ -15,7 +15,7 @@ def lidar_test(bus: int, address: int = 0x10) -> None:
             else:
                 print(f"distance: {dist} cm, flux: {flux}, temp (raw): {temp}")
 
-            time.sleep(0.5)
+            time.sleep(0.05)
 
     except KeyboardInterrupt:
         pass
