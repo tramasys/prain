@@ -8,7 +8,7 @@ from sensors.lidar import LidarSensor
 from brain.planner import PathPlanner
 
 class HighLevelController:
-    def __init__(self, uart_port: str, uart_baudrate: int, lidar_port: str = "/dev/ttyUSB1", lidar_baudrate: int = 115200):
+    def __init__(self, uart_port: str, uart_baudrate: int, lidar_port: str, lidar_baudrate: int):
         self.uart_manager = UartManager(uart_port, uart_baudrate)
 
         self.camera = CameraSensor(device_index=0)
