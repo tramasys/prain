@@ -16,8 +16,8 @@ def main_loop(args) -> None:
     controller = HighLevelController(
         uart_port=args.uart,
         uart_baudrate=args.uart_baudrate,
-        lidar_port=args.lidar,
-        lidar_baudrate=args.lidar_baudrate,
+        lidar_bus=args.lidar,
+        lidar_address=args.lidar_address,
     )
 
     controller.start()
@@ -53,7 +53,7 @@ def main():
         "dtest":    run_dtest,
         "etest":    run_etest,
         "rcserver": run_rcserver,
-        "ldtest":   lambda: lidar_test(args.lidar),
+        "ldtest":   lambda: lidar_test(args.lidar, args.lidar_address),
         None:       lambda: main_loop(args),
     }
 

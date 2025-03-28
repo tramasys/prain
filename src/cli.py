@@ -6,6 +6,7 @@ class CliArgs(NamedTuple):
     uart: str
     uart_baudrate: int
     lidar: int
+    lidar_address: int
     host: str
     server_port: int
 
@@ -15,6 +16,7 @@ def parse_args() -> CliArgs:
     parser.add_argument("-u", "--uart", default="/dev/ttyS0", help="UART port (default: /dev/ttyS0)")
     parser.add_argument("-ub", "--uart-baudrate", type=int, default=115200, help="UART baudrate (default: 115200)")
     parser.add_argument("-l", "--lidar", type=int, default=1, help="Lidar bus number (default: 1)")
+    parser.add_argument("-la", "--lidar-address", type=int, default=0x10, help="Lidar I2C address (default: 0x10)")
     parser.add_argument("--host", default="localhost", help="Server host for rcclient (default: localhost)")
     parser.add_argument("--port", type=int, default=5000, help="Server port for rcclient (default: 5000)")
     args = parser.parse_args()
@@ -24,6 +26,7 @@ def parse_args() -> CliArgs:
         uart=args.uart,
         uart_baudrate=args.uart_baudrate,
         lidar=args.lidar,
+        lidar_address=args.lidar_address,
         host=args.host,
         server_port=args.port
     )

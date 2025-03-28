@@ -40,7 +40,7 @@ class LidarSensor:
     def __init__(self, bus: int = 1, address: int = 0x10, poll_interval: float = 0.05):
         """
         :param bus: I2C bus number on RPi (1 => /dev/i2c-1)
-        :param address: 7-bit address of TF-Luna in I2C mode (often 0x10)
+        :param address: 7-bit address of TF-Luna in I2C mode (0x10)
         :param poll_interval: time in seconds between background reads
         """
         self.bus_num = bus
@@ -83,7 +83,6 @@ class LidarSensor:
             self._flux = flux
             self._temp = temp
         except OSError as e:
-            # E.g. if sensor is disconnected
             print(f"Error reading TF-Luna I2C: {e}")
 
     def get_data(self):
@@ -100,7 +99,6 @@ class LidarSensor:
         Read one byte from register 'reg' using repeated start.
         Return the read byte as int.
         """
-        # You can do this with a 1-byte read:
         data = self._bus.read_i2c_block_data(self.address, reg, 1)
         return data[0]
 

@@ -8,11 +8,11 @@ from sensors.lidar import LidarSensor
 from brain.planner import PathPlanner
 
 class HighLevelController:
-    def __init__(self, uart_port: str, uart_baudrate: int, lidar_port: str, lidar_baudrate: int):
+    def __init__(self, uart_port: str, uart_baudrate: int, lidar_bus: int, lidar_address: int):
         self.uart_manager = UartManager(uart_port, uart_baudrate)
 
         self.camera = CameraSensor(device_index=0)
-        self.lidar = LidarSensor(port=lidar_port, baudrate=lidar_baudrate)
+        self.lidar = LidarSensor(bus=lidar_bus, address=lidar_address)
 
         self.planner = PathPlanner(graph={})
         self.current_node = None
@@ -32,7 +32,7 @@ class HighLevelController:
         while self.keep_running:
             # 1) get sensor data
             frame = self.camera.get_latest_frame()
-            lidar_data = self.lidar.get_latest_scan()
+            lidar_data = self.lidar.get_data()
             sensor_data = {
                 "frame": frame,
                 "lidar": lidar_data,
