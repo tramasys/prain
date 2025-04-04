@@ -7,6 +7,7 @@ from sensors.camera import CameraSensor
 from sensors.lidar import LidarSensor
 from brain.planner import PathPlanner
 from brain.graph import Graph
+from prain_uart import *
 
 class HighLevelController:
     def __init__(self, uart_port: str, uart_baudrate: int, lidar_bus: int, lidar_address: int, target_node: str, logger: logging.Logger):
@@ -36,11 +37,15 @@ class HighLevelController:
                 "lidar":  self.lidar.get_data(),
             }
 
-            inbound_frames = []
+            inbound_data = []
             while not self.uart_manager.rx_queue.empty():
                 frame = self.uart_manager.rx_queue.get()
-                inbound_frames.append(frame)
-                self.logger.debug(f"Received frame: addr={frame.addr}, cmd={frame.cmd}, param={frame.parameter}")
+                decoder = Decoder(frame)
+                if decoder.verify_crc():
+                    inbound_data.append((decoder.command, decoder.get_params()))
+                    self.logger.debug(f"Received valid frame: cmd={decoder.command.name}, params={decoder.get_params()}")
+                else:
+                    self.logger.warning(f"Invalid CRC for frame: addr={frame.addr}, cmd={frame.cmd}")
 
             command, current_node = self.planner.next_action(sensor_data)
             if command is not None:
