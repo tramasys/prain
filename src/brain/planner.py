@@ -27,6 +27,7 @@ class PathPlanner:
     def next_action(self, sensor_data: dict) -> tuple[Frame | None, str]:
         camera = sensor_data["camera"] # {potential_node_detected, node_detected, angles}
         lidar = sensor_data["lidar"]
+
         dist_cm, _, _ = lidar if lidar else (None, None, None)
 
         if self.state == NavState.TRAVELING_EDGE:

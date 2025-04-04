@@ -32,7 +32,7 @@ class HighLevelController:
         while self.keep_running:
             sensor_data = {
                 "camera": self.camera.get_data(),
-                "lidar": self.lidar.get_data(),
+                "lidar":  self.lidar.get_data(),
             }
 
             while not self.uart_manager.rx_queue.empty():
