@@ -3,143 +3,161 @@ from prain_uart import *
 from brain.graph import Graph
 
 class NavState(Enum):
-    TRAVELING_EDGE = 1
-    ARRIVED_AT_POTENTIAL_NODE = 2
-    ARRIVED_AT_NODE = 3
-    DECIDING_NEXT_EDGE = 4
-    GOAL_REACHED = 5
-    CHECKING_POTENTIAL_NODE = 6
+    TRAVELING_EDGE              = 1
+    ARRIVED_AT_POTENTIAL_NODE   = 2
+    ARRIVED_AT_NODE             = 3
+    DECIDING_NEXT_ANGLE         = 4
+    CHECK_NEXT_ANGLE            = 5
+    GOAL_REACHED                = 6
+    BLOCKED                     = 7
 
 class PathPlanner:
     def __init__(self, graph: Graph, target_node: str):
         self.graph = graph
         self.current_node = "S"
         self.target_node = target_node
+
         self.state = NavState.ARRIVED_AT_NODE
-        self.available_angles = []
-        self.blocked_angles = []
-        self.visited_nodes = set()
-        self.visited_edges = set() # Track edges as "from-to" strings
-        self.current_angle = 0 # Track the robot's current orientation
-        self.potential_edges = [] # List of edges to check
-        self.current_edge_index = 0 # Index of the edge being checked
+
+        self.visited_nodes    = set()
+        self.current_orientation = 0
+        self.node_orientation    = 0  # Orientation at node
+        self.angles_from_camera  = []  # Angles at current node
+        self.current_angle_index = 0   # Which angle we're testing
+        self.last_chosen_angle   = None  # Track the angle we moved along
+
+        # Scoring constants
+        self.SECTION_BOOST = 3
+        self.WRONG_DIRECTION_PENALTY = 0.5
+        self.DIRECTION_BOOST = 3
+        self.RETURN_BOOST = 2
+        self.FURTHER_AWAY_PENALTY = -2
 
     def next_action(self, sensor_data: dict) -> tuple[Frame | None, str]:
-        camera = sensor_data["camera"] # {potential_node_detected, node_detected, angles}
-        lidar = sensor_data["lidar"]
+        """
+        sensor_data["camera"] => {
+          "node_detected": bool,
+          "potential_node_detected": bool,
+          "angles": list[int]
+        }
+        sensor_data["lidar"] => (dist_cm, flux, temp)
+        """
+        camera = sensor_data.get("camera", {})
+        lidar  = sensor_data.get("lidar", (None, None, None))
+        dist_cm, _, _ = lidar
 
-        dist_cm, _, _ = lidar if lidar else (None, None, None)
+        node_detected           = camera.get("node_detected", False)
+        potential_node_detected = camera.get("potential_node_detected", False)
+        angles                  = camera.get("angles", [])
 
+        # ---------------- TRAVELING_EDGE ----------------
         if self.state == NavState.TRAVELING_EDGE:
-            if camera["node_detected"]:
+            if node_detected:
+                # After moving, update current_node based on the last angle
+                self.current_node = self._infer_next_node(self.current_node, self.last_chosen_angle)
                 self.state = NavState.ARRIVED_AT_NODE
                 return encode_stop(Address.MOTION_CTRL), self.current_node
-            elif camera["potential_node_detected"]:
+            elif potential_node_detected:
                 self.state = NavState.ARRIVED_AT_POTENTIAL_NODE
                 return encode_stop(Address.MOTION_CTRL), self.current_node
             return None, self.current_node
 
+        # ---------- ARRIVED_AT_POTENTIAL_NODE ----------
         elif self.state == NavState.ARRIVED_AT_POTENTIAL_NODE:
-            if camera["node_detected"]:
+            if node_detected:
+                self.current_node = self._infer_next_node(self.current_node, self.last_chosen_angle)
                 self.state = NavState.ARRIVED_AT_NODE
             return None, self.current_node
 
+        # --------------- ARRIVED_AT_NODE ---------------
         elif self.state == NavState.ARRIVED_AT_NODE:
             if self.current_node == self.target_node:
                 self.state = NavState.GOAL_REACHED
                 return encode_stop(Address.MOTION_CTRL), self.current_node
 
-            self.available_angles = camera["angles"]
-            self.blocked_angles = []
+            # Sort angles by pathfinding heuristic
+            self.angles_from_camera = self._sort_angles_by_pathfinding(angles)
+            self.current_angle_index = 0
+            self.node_orientation = self.current_orientation
 
-            self._update_graph(self.current_node, self.available_angles, self.blocked_angles)
             self.visited_nodes.add(self.current_node)
-            self.state = NavState.DECIDING_NEXT_EDGE
-            self.current_angle = 0
+            self.state = NavState.DECIDING_NEXT_ANGLE
             return None, self.current_node
 
-        elif self.state == NavState.DECIDING_NEXT_EDGE:
-            self.potential_edges = self._get_possible_edges(self.current_node, self.target_node)
-            if not self.potential_edges:
+        # ------------ DECIDING_NEXT_ANGLE --------------
+        elif self.state == NavState.DECIDING_NEXT_ANGLE:
+            if not self.angles_from_camera:
+                self.state = NavState.BLOCKED
                 return encode_stop(Address.MOTION_CTRL), self.current_node
 
-            self.current_edge_index = 0
-            self.state = NavState.CHECKING_POTENTIAL_NODE
-            # Turn to the first potential edge's angle
-            _, _, angle = self.potential_edges[self.current_edge_index]
-            return encode_turn(Address.MOTION_CTRL, angle), self.current_node
+            if self.current_angle_index >= len(self.angles_from_camera):
+                self.state = NavState.BLOCKED
+                return encode_stop(Address.MOTION_CTRL), self.current_node
 
-        elif self.state == NavState.CHECKING_POTENTIAL_NODE:
-            # After turning, check LiDAR distance
-            _, next_node, angle = self.potential_edges[self.current_edge_index]
+            # Turn to the next angle
+            angle_choice = self.angles_from_camera[self.current_angle_index]
+            turn_amount = angle_choice - self.node_orientation
+            self.current_orientation = angle_choice
+            self.last_chosen_angle = angle_choice  # Store for node inference later
 
-            if dist_cm is not None and dist_cm <= 200:  # Pylon detected (≤ 200cm)
-                self.graph.set_node_blocked(next_node, True)
-                # Turn back to initial angle (0) and try next edge
-                self.current_edge_index += 1
-                if self.current_edge_index < len(self.potential_edges):
-                    # Turn to next edge's angle
-                    _, _, next_angle = self.potential_edges[self.current_edge_index]
-                    return encode_turn(Address.MOTION_CTRL, next_angle), self.current_node
-                else:
-                    # No more edges to try
-                    return encode_stop(Address.MOTION_CTRL), self.current_node
+            self.state = NavState.CHECK_NEXT_ANGLE
+            return encode_turn(Address.MOTION_CTRL, turn_amount), self.current_node
+
+        # -------------- CHECK_NEXT_ANGLE ---------------
+        elif self.state == NavState.CHECK_NEXT_ANGLE:
+            if dist_cm is not None and dist_cm <= 200:
+                # Blocked => turn back
+                revert_turn = self.node_orientation - self.current_orientation
+                self.current_orientation = self.node_orientation
+
+                # Try next angle
+                self.current_angle_index += 1
+                self.state = NavState.DECIDING_NEXT_ANGLE
+                return encode_turn(Address.MOTION_CTRL, revert_turn), self.current_node
+
             else:
-                # No pylon (> 200cm or None), proceed to this node
-                self.graph.set_node_blocked(next_node, False)
-                edge_id = f"{self.current_node}-{next_node}"
-                self.visited_edges.add(edge_id)
-                self.current_node = next_node
+                # Not blocked => indefinite move
                 self.state = NavState.TRAVELING_EDGE
-                self.current_angle = angle  # Update orientation
-                return encode_move(Address.MOTION_CTRL, angle), self.current_node
+                return encode_move(Address.MOTION_CTRL, 0), self.current_node
 
+        # ---------------- GOAL_REACHED -----------------
         elif self.state == NavState.GOAL_REACHED:
+            return encode_stop(Address.MOTION_CTRL), self.current_node
+
+        # ---------------- BLOCKED ----------------------
+        elif self.state == NavState.BLOCKED:
             return encode_stop(Address.MOTION_CTRL), self.current_node
 
         return None, self.current_node
 
-    def _update_graph(self, current_node: str, angles: list, blocked_angles: list):
-        neighbors = self.graph.get_neighbors(current_node)
+    def _sort_angles_by_pathfinding(self, angles: list[int]) -> list[int]:
+        """Sort angles based on section scoring and hop distance to target_node."""
+        target_section = self.graph.get_node_section(self.target_node)
+        current_section = self.graph.get_node_section(self.current_node)
+
+        # Score each angle based on potential next nodes
+        angle_scores = []
         for angle in angles:
-            next_node = self._angle_to_node(current_node, angle)
-            if next_node:
-                traversable = angle not in blocked_angles
-                self.graph.set_edge_traversable(current_node, next_node, traversable)
+            # Infer potential next node (best guess without direct mapping)
+            potential_node = self._infer_potential_node(self.current_node, angle)
+            if potential_node and potential_node not in self.visited_nodes:
+                score = self._score_node(potential_node, target_section, current_section)
+                angle_scores.append((angle, score))
+            else:
+                # Penalize angles leading to visited or unknown nodes
+                angle_scores.append((angle, -float('inf')))
 
-    def _get_possible_edges(self, current_node: str, target_node: str) -> list[tuple[str, str, int]]:
-        # Scoring adjustments from JS
-        SECTION_BOOST = 3
-        WRONG_DIRECTION_PENALTY = 0.5
-        DIRECTION_BOOST = 3
-        RETURN_BOOST = 2
-        FURTHER_AWAY_PENALTY = -2
+        # Sort by score (highest first) and return just the angles
+        angle_scores.sort(key=lambda x: x[1], reverse=True)
+        return [angle for angle, _ in angle_scores]
 
-        target_section = self.graph.get_node_section(target_node)
-        current_section = self.graph.get_node_section(current_node)
-
-        neighbors = self.graph.get_neighbors(current_node)
-        possible_edges = []
-        for next_node, traversable in neighbors.items():
-            if not traversable or f"{current_node}-{next_node}" in self.visited_edges:
-                continue
-            angle = self._node_to_angle(current_node, next_node)
-            possible_edges.append((current_node, next_node, angle))
-
-        possible_edges.sort(key=lambda edge: self._score_edge(edge, target_node, target_section, current_section,
-                                                              SECTION_BOOST, WRONG_DIRECTION_PENALTY, DIRECTION_BOOST,
-                                                              RETURN_BOOST, FURTHER_AWAY_PENALTY), reverse=True)
-        return possible_edges
-
-    def _score_edge(self, edge: tuple[str, str, int], target_node: str, target_section: str, current_section: str,
-                    SECTION_BOOST: float, WRONG_DIRECTION_PENALTY: float, DIRECTION_BOOST: float,
-                    RETURN_BOOST: float, FURTHER_AWAY_PENALTY: float) -> float:
-        _, next_node, _ = edge
+    def _score_node(self, next_node: str, target_section: str, current_section: str) -> float:
+        """Score a node based on section and hop distance."""
         next_section = self.graph.get_node_section(next_node)
 
         # Hop distance as a proxy for direction
-        hop_distance_to_target = self._estimate_hop_distance(next_node, target_node)
-        hop_distance_from_current = self._estimate_hop_distance(self.current_node, target_node)
+        hop_distance_to_target = self._estimate_hop_distance(next_node, self.target_node)
+        hop_distance_from_current = self._estimate_hop_distance(self.current_node, self.target_node)
         direction_score = 1.0 if hop_distance_to_target < hop_distance_from_current else -1.0
 
         # Section scoring
@@ -148,19 +166,20 @@ class PathPlanner:
 
         score = 0
         if next_section == target_section:
-            score += SECTION_BOOST
+            score += self.SECTION_BOOST
         if target_distance < current_distance:
-            score += RETURN_BOOST
+            score += self.RETURN_BOOST
         elif target_distance > current_distance:
-            score += FURTHER_AWAY_PENALTY
+            score += self.FURTHER_AWAY_PENALTY
 
         if target_distance == current_distance:
-            directional_score = DIRECTION_BOOST if direction_score > 0 else WRONG_DIRECTION_PENALTY
+            directional_score = self.DIRECTION_BOOST if direction_score > 0 else self.WRONG_DIRECTION_PENALTY
             score += directional_score
 
         return score
 
     def _estimate_hop_distance(self, start_node: str, target_node: str) -> int:
+        """Estimate hop distance to target_node using BFS."""
         if start_node == target_node:
             return 0
         visited = {start_node}
@@ -176,18 +195,24 @@ class PathPlanner:
         return float('inf')
 
     def _get_section_distance(self, from_section: str, to_section: str) -> int:
+        """Calculate distance between sections."""
         sections = ["left", "middle", "right"]
         return abs(sections.index(from_section) - sections.index(to_section))
 
-    def _angle_to_node(self, current_node: str, angle: int) -> str | None:
+    def _infer_next_node(self, current_node: str, angle: int) -> str:
+        """Infer the next node after moving along an angle."""
         neighbors = self.graph.get_neighbors(current_node)
-        for node in neighbors:
-            if str(angle) in node:
-                return node
-        return None
+        # Heuristic: Pick the unvisited neighbor with the smallest hop distance to target
+        viable_neighbors = [n for n, t in neighbors.items() if t and n not in self.visited_nodes]
+        if not viable_neighbors:
+            return current_node  # Stay put if no viable options
+        return min(viable_neighbors, key=lambda n: self._estimate_hop_distance(n, self.target_node), default=current_node)
 
-    def _node_to_angle(self, current_node: str, next_node: str) -> int:
-        try:
-            return int(next_node.split("_")[-1]) if "_" in next_node else 0
-        except (ValueError, IndexError):
-            return 0
+    def _infer_potential_node(self, current_node: str, angle: int) -> str | None:
+        """Infer a potential next node for scoring, without direct angle mapping."""
+        neighbors = self.graph.get_neighbors(current_node)
+        viable_neighbors = [n for n, t in neighbors.items() if t and n not in self.visited_nodes]
+        if not viable_neighbors:
+            return None
+        # Simple heuristic: Pick the neighbor closest to target by hop distance
+        return min(viable_neighbors, key=lambda n: self._estimate_hop_distance(n, self.target_node), default=None)
