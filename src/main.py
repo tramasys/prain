@@ -1,4 +1,5 @@
 import time
+
 from utils.logging import setup_logging
 from sub.dtest import decode_test
 from sub.etest import encode_test
@@ -18,7 +19,8 @@ def main_loop(args) -> None:
         uart_baudrate=args.uart_baudrate,
         lidar_bus=args.lidar,
         lidar_address=args.lidar_address,
-        target_node="A"
+        target_node="A",
+        logger=logger,
     )
 
     controller.start()

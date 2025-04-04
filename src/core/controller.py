@@ -1,5 +1,6 @@
 import threading
 import time
+import logging
 
 from comms.manager import UartManager
 from sensors.camera import CameraSensor
@@ -8,14 +9,14 @@ from brain.planner import PathPlanner
 from brain.graph import Graph
 
 class HighLevelController:
-    def __init__(self, uart_port: str, uart_baudrate: int, lidar_bus: int, lidar_address: int, target_node: str):
+    def __init__(self, uart_port: str, uart_baudrate: int, lidar_bus: int, lidar_address: int, target_node: str, logger: logging.Logger):
         self.uart_manager = UartManager(uart_port, uart_baudrate)
 
         self.camera = CameraSensor(device_index=0)
         self.lidar = LidarSensor(bus=lidar_bus, address=lidar_address)
 
         self.graph = Graph()
-        self.planner = PathPlanner(graph=self.graph, target_node=target_node)
+        self.planner = PathPlanner(graph=self.graph, target_node=target_node, logger=logger)
 
         self.keep_running = True
         self._decision_thread = None
