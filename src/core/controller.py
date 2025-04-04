@@ -5,16 +5,17 @@ from comms.manager import UartManager
 from sensors.camera import CameraSensor
 from sensors.lidar import LidarSensor
 from brain.planner import PathPlanner
+from brain.graph import Graph
 
 class HighLevelController:
-    def __init__(self, uart_port: str, uart_baudrate: int, lidar_bus: int, lidar_address: int):
+    def __init__(self, uart_port: str, uart_baudrate: int, lidar_bus: int, lidar_address: int, target_node: str):
         self.uart_manager = UartManager(uart_port, uart_baudrate)
 
         self.camera = CameraSensor(device_index=0)
         self.lidar = LidarSensor(bus=lidar_bus, address=lidar_address)
 
-        self.planner = PathPlanner(graph={})
-        self.current_node = None
+        self.graph = Graph()
+        self.planner = PathPlanner(graph=self.graph, target_node=target_node)
 
         self.keep_running = True
         self._decision_thread = None
@@ -29,24 +30,17 @@ class HighLevelController:
 
     def _main_loop(self):
         while self.keep_running:
-            # 1) get sensor data
-            frame = self.camera.get_latest_frame()
-            lidar_data = self.lidar.get_data() # we get (dist_cm, flux, temp)
-
             sensor_data = {
-                "frame": frame,
-                "lidar": lidar_data,
+                "camera": self.camera.get_data(),
+                "lidar": self.lidar.get_data(),
             }
 
-            # 2) process inbound uart
             while not self.uart_manager.rx_queue.empty():
                 inbound_frame = self.uart_manager.rx_queue.get()
-                # todo
 
-            # 3) decide next action
-            next_command = self.planner.next_action(self.current_node, sensor_data)
-            if next_command is not None:
-                self.uart_manager.send_frame(next_command)
+            command, current_node = self.planner.next_action(sensor_data)
+            if command is not None:
+                self.uart_manager.send_frame(command)
 
             time.sleep(0.1)
 

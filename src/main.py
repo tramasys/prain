@@ -18,6 +18,7 @@ def main_loop(args) -> None:
         uart_baudrate=args.uart_baudrate,
         lidar_bus=args.lidar,
         lidar_address=args.lidar_address,
+        target_node="A"
     )
 
     controller.start()

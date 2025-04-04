@@ -24,6 +24,9 @@ class CameraSensor:
     def get_latest_frame(self):
         return self._latest_frame
 
+    def get_data(self):
+        return ""
+
     def stop(self):
         self._stop = True
         if self._thread:
