@@ -19,13 +19,13 @@ class PathPlanner:
         self.available_angles = []
         self.blocked_angles = []
         self.visited_nodes = set()
-        self.visited_edges = set()  # Track edges as "from-to" strings
-        self.current_angle = 0  # Track the robot's current orientation
-        self.potential_edges = []  # List of edges to check
-        self.current_edge_index = 0  # Index of the edge being checked
+        self.visited_edges = set() # Track edges as "from-to" strings
+        self.current_angle = 0 # Track the robot's current orientation
+        self.potential_edges = [] # List of edges to check
+        self.current_edge_index = 0 # Index of the edge being checked
 
     def next_action(self, sensor_data: dict) -> tuple[Frame | None, str]:
-        camera = sensor_data["camera"]  # {potential_node_detected, node_detected, angles}
+        camera = sensor_data["camera"] # {potential_node_detected, node_detected, angles}
         lidar = sensor_data["lidar"]
         dist_cm, _, _ = lidar if lidar else (None, None, None)
 
