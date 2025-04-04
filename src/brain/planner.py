@@ -8,6 +8,7 @@ class NavState(Enum):
     ARRIVED_AT_NODE = 3
     DECIDING_NEXT_EDGE = 4
     GOAL_REACHED = 5
+    CHECKING_POTENTIAL_NODE = 6
 
 class PathPlanner:
     def __init__(self, graph: Graph, target_node: str):
@@ -19,6 +20,9 @@ class PathPlanner:
         self.blocked_angles = []
         self.visited_nodes = set()
         self.visited_edges = set()  # Track edges as "from-to" strings
+        self.current_angle = 0  # Track the robot's current orientation
+        self.potential_edges = []  # List of edges to check
+        self.current_edge_index = 0  # Index of the edge being checked
 
     def next_action(self, sensor_data: dict) -> tuple[Frame | None, str]:
         camera = sensor_data["camera"]  # {potential_node_detected, node_detected, angles}
@@ -50,19 +54,44 @@ class PathPlanner:
             self._update_graph(self.current_node, self.available_angles, self.blocked_angles)
             self.visited_nodes.add(self.current_node)
             self.state = NavState.DECIDING_NEXT_EDGE
+            self.current_angle = 0
             return None, self.current_node
 
         elif self.state == NavState.DECIDING_NEXT_EDGE:
-            next_move = self._plan_next_step(self.current_node, self.target_node, dist_cm)
-            if not next_move:
+            self.potential_edges = self._get_possible_edges(self.current_node, self.target_node)
+            if not self.potential_edges:
                 return encode_stop(Address.MOTION_CTRL), self.current_node
 
-            next_node, angle = next_move
-            edge_id = f"{self.current_node}-{next_node}"
-            self.visited_edges.add(edge_id)
-            self.current_node = next_node
-            self.state = NavState.TRAVELING_EDGE
-            return encode_move(Address.MOTION_CTRL, angle), self.current_node
+            self.current_edge_index = 0
+            self.state = NavState.CHECKING_POTENTIAL_NODE
+            # Turn to the first potential edge's angle
+            _, _, angle = self.potential_edges[self.current_edge_index]
+            return encode_turn(Address.MOTION_CTRL, angle), self.current_node
+
+        elif self.state == NavState.CHECKING_POTENTIAL_NODE:
+            # After turning, check LiDAR distance
+            _, next_node, angle = self.potential_edges[self.current_edge_index]
+
+            if dist_cm is not None and dist_cm <= 200:  # Pylon detected (≤ 200cm)
+                self.graph.set_node_blocked(next_node, True)
+                # Turn back to initial angle (0) and try next edge
+                self.current_edge_index += 1
+                if self.current_edge_index < len(self.potential_edges):
+                    # Turn to next edge's angle
+                    _, _, next_angle = self.potential_edges[self.current_edge_index]
+                    return encode_turn(Address.MOTION_CTRL, next_angle), self.current_node
+                else:
+                    # No more edges to try
+                    return encode_stop(Address.MOTION_CTRL), self.current_node
+            else:
+                # No pylon (> 200cm or None), proceed to this node
+                self.graph.set_node_blocked(next_node, False)
+                edge_id = f"{self.current_node}-{next_node}"
+                self.visited_edges.add(edge_id)
+                self.current_node = next_node
+                self.state = NavState.TRAVELING_EDGE
+                self.current_angle = angle  # Update orientation
+                return encode_move(Address.MOTION_CTRL, angle), self.current_node
 
         elif self.state == NavState.GOAL_REACHED:
             return encode_stop(Address.MOTION_CTRL), self.current_node
@@ -76,25 +105,6 @@ class PathPlanner:
             if next_node:
                 traversable = angle not in blocked_angles
                 self.graph.set_edge_traversable(current_node, next_node, traversable)
-
-    def _plan_next_step(self, current_node: str, target_node: str, dist_cm: float | None) -> tuple[str, int] | None:
-        possible_edges = self._get_possible_edges(current_node, target_node)
-        if not possible_edges:
-            return None
-
-        for edge in possible_edges:
-            next_node = edge[1]  # (from, to, angle) tuple
-            # Pylon detection: if distance ≤ 200cm, assume a pylon might be present
-            if dist_cm is not None and dist_cm <= 200:  # Anything ≤ 200cm could be a pylon
-                self.graph.set_node_blocked(next_node, True)
-            else:  # > 200cm means the node is free
-                self.graph.set_node_blocked(next_node, False)
-
-        viable_moves = [
-            (next_node, angle) for _, next_node, angle in possible_edges
-            if not self.graph.is_node_blocked(next_node) and next_node not in self.visited_nodes
-        ]
-        return viable_moves[0] if viable_moves else None
 
     def _get_possible_edges(self, current_node: str, target_node: str) -> list[tuple[str, str, int]]:
         # Scoring adjustments from JS
