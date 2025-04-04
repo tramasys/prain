@@ -27,7 +27,7 @@ def main_loop(args) -> None:
 
     try:
         while True:
-            logger.info("Running main loop iteration")
+            logger.info("Keeping main loop iteration alive ...")
             time.sleep(0.1)
     except KeyboardInterrupt:
         logger.info("SHUTTING DOWN")
@@ -38,17 +38,17 @@ def main():
     args = parse_args()
 
     def run_dtest():
-        uart = UartInterface(args.uart, baudrate=args.uart_baudrate)
+        uart = UartInterface(args.uart, args.uart_baudrate)
         decode_test(uart)
         uart.close()
 
     def run_etest():
-        uart = UartInterface(args.uart, baudrate=args.uart_baudrate)
+        uart = UartInterface(args.uart, args.uart_baudrate)
         encode_test(uart)
         uart.close()
 
     def run_rcserver():
-        uart = UartInterface(args.uart, baudrate=args.uart_baudrate)
+        uart = UartInterface(args.uart, args.uart_baudrate)
         rc_server(uart, args.host, args.port)
         uart.close()
 

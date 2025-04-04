@@ -36,8 +36,11 @@ class HighLevelController:
                 "lidar":  self.lidar.get_data(),
             }
 
+            inbound_frames = []
             while not self.uart_manager.rx_queue.empty():
-                inbound_frame = self.uart_manager.rx_queue.get()
+                frame = self.uart_manager.rx_queue.get()
+                inbound_frames.append(frame)
+                self.logger.debug(f"Received frame: addr={frame.addr}, cmd={frame.cmd}, param={frame.parameter}")
 
             command, current_node = self.planner.next_action(sensor_data)
             if command is not None:
