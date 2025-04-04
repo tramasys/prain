@@ -1,6 +1,5 @@
 import threading
 import time
-from queue import Queue
 
 from comms.manager import UartManager
 from sensors.camera import CameraSensor
@@ -33,6 +32,7 @@ class HighLevelController:
             # 1) get sensor data
             frame = self.camera.get_latest_frame()
             lidar_data = self.lidar.get_data() # we get (dist_cm, flux, temp)
+
             sensor_data = {
                 "frame": frame,
                 "lidar": lidar_data,

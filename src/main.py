@@ -46,20 +46,17 @@ def main():
 
     def run_rcserver():
         uart = UartInterface(args.uart, baudrate=args.uart_baudrate)
-        rc_server(uart, args.host, args.server_port)
+        rc_server(uart, args.host, args.port)
         uart.close()
 
     subprogram_handlers = {
         "dtest":    run_dtest,
         "etest":    run_etest,
         "rcserver": run_rcserver,
+        "rcclient": lambda: rc_client(args.host, args.port),
         "ldtest":   lambda: lidar_test(args.lidar, args.lidar_address),
         None:       lambda: main_loop(args),
     }
-
-    if args.subprogram == "rcclient":
-        rc_client(host=args.host, port=args.server_port)
-        return
 
     handler = subprogram_handlers.get(args.subprogram, subprogram_handlers[None])
     handler()

@@ -8,7 +8,7 @@ class CliArgs(NamedTuple):
     lidar: int
     lidar_address: int
     host: str
-    server_port: int
+    port: int
 
 def parse_args() -> CliArgs:
     parser = argparse.ArgumentParser(description="Self-driving car high-level controller")
@@ -28,5 +28,5 @@ def parse_args() -> CliArgs:
         lidar=args.lidar,
         lidar_address=args.lidar_address,
         host=args.host,
-        server_port=args.port
+        port=args.port
     )
