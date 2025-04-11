@@ -132,8 +132,7 @@ def rc_client(host: str = "localhost", port: int = 5000) -> None:
                         s.sendall(b"get_received\n")
                         response = s.recv(4096).decode().strip()
 
-                if response and response != "":
-                    self.add_to_recv_log(response)
+                self.add_to_recv_log(response)
             except Exception as e:
                 self.add_to_recv_log(f"Error polling: {e}")
 
@@ -146,9 +145,6 @@ def rc_client(host: str = "localhost", port: int = 5000) -> None:
             self.send_log_text.see("end")
 
         def add_to_recv_log(self, message: str):
-            if not message.strip():
-                return
-
             self.recv_log_text.config(state="normal")
             self.recv_log_text.insert("end", f"{message}\n")
             self.recv_log_text.config(state="disabled")
