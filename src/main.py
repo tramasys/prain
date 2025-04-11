@@ -47,15 +47,10 @@ def main():
         encode_test(uart)
         uart.close()
 
-    def run_rcserver():
-        uart = UartInterface(args.uart, args.uart_baudrate)
-        rc_server(uart, args.host, args.port)
-        uart.close()
-
     subprogram_handlers = {
         "dtest":    run_dtest,
         "etest":    run_etest,
-        "rcserver": run_rcserver,
+        "rcserver": lambda: rc_server(args.uart, args.uart_baudrate, args.host, args.port),
         "rcclient": lambda: rc_client(args.host, args.port),
         "ldtest":   lambda: lidar_test(args.lidar, args.lidar_address),
         None:       lambda: main_loop(args),

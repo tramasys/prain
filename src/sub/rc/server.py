@@ -1,10 +1,30 @@
 import threading
+import queue
 import socket
-from typing import Optional
-from comms.uart import UartInterface
-from .commands import execute_command
+from comms.manager import UartManager
+from commands import execute_command
 
-def start_server(uart: UartInterface, host: str = "localhost", port: int = 5000) -> threading.Thread:
+received_queue = queue.Queue()
+
+def logger_loop(uart_manager: UartManager) -> None:
+    """Continuously read frames from UartManager's rx_queue, store them in received_queue."""
+    while True:
+        frame = uart_manager.rx_queue.get()
+        text = f"LOW-LEVEL RX: raw=0x{frame.raw:016X}"
+        received_queue.put(text)
+
+def start_server(
+    host: str = "localhost",
+    port: int = 5000,
+    uart_port: str = "/dev/ttyS0",
+    uart_baud: int = 115200
+) -> threading.Thread:
+    uart_manager = UartManager(uart_port, uart_baud)
+    uart_manager.start()
+
+    # Start a thread that drains frames from UartManager's rx_queue
+    t_logger = threading.Thread(target=logger_loop, args=(uart_manager,), daemon=True)
+    t_logger.start()
 
     def server_loop():
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
@@ -17,10 +37,20 @@ def start_server(uart: UartInterface, host: str = "localhost", port: int = 5000)
                 with conn:
                     print(f"Connected by {addr}")
                     data = conn.recv(1024).decode().strip()
-                    if data:
-                        result = execute_command(uart, data)
+                    if not data:
+                        continue
+
+                    if data == "get_received":
+                        logs = []
+                        while not received_queue.empty():
+                            logs.append(received_queue.get())
+                        if logs:
+                            response = "\n".join(logs)
+                        conn.sendall(response.encode())
+                    else:
+                        result = execute_command(uart_manager, data)
                         conn.sendall(result.encode())
 
-    thread = threading.Thread(target=server_loop, daemon=True)
-    thread.start()
-    return thread
+    t_server = threading.Thread(target=server_loop, daemon=True)
+    t_server.start()
+    return t_server

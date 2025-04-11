@@ -40,77 +40,112 @@ def rc_client(host: str = "localhost", port: int = 5000) -> None:
             self.entries = {}
             self.address_vars = {}
 
-            ttk.Label(self.command_frame, text="Target Address:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
             address_options = [a.name for a in Address]
-            for row, (cmd, _) in enumerate(self.commands, start=1):
-                addr_var = tk.StringVar(value=address_options[1])  # Default MOTION_CTRL
-                addr_combo = ttk.Combobox(self.command_frame, textvariable=addr_var, values=address_options, width=15, state="readonly")
+            for row, (cmd, arglist) in enumerate(self.commands, start=1):
+                addr_var = tk.StringVar(value=address_options[1])  # Default to MOTION_CTRL
+                addr_combo = ttk.Combobox(self.command_frame, textvariable=addr_var,
+                                          values=address_options, width=12, state="readonly")
                 addr_combo.grid(row=row, column=0, padx=5, pady=5, sticky="w")
                 self.address_vars[cmd] = addr_var
 
-            for row, (cmd, args) in enumerate(self.commands, start=1):
-                ttk.Label(self.command_frame, text=f"{cmd.capitalize()}:").grid(row=row, column=1, padx=5, pady=5, sticky="w")
+                ttk.Label(self.command_frame, text=f"{cmd.capitalize()}:").grid(
+                    row=row, column=1, padx=5, pady=5, sticky="w"
+                )
 
                 col = 2
                 self.entries[cmd] = []
-                for arg_label, default in args:
+                for arg_label, default in arglist:
                     ttk.Label(self.command_frame, text=arg_label).grid(row=row, column=col, padx=5, pady=5, sticky="w")
                     col += 1
                     if isinstance(default, list):
                         var = tk.StringVar(value=default[0])
-                        entry = ttk.Combobox(self.command_frame, textvariable=var, values=default, width=15, state="readonly")
+                        entry = ttk.Combobox(self.command_frame, textvariable=var, values=default,
+                                             width=12, state="readonly")
                     else:
-                        entry = ttk.Entry(self.command_frame, width=10)
+                        entry = ttk.Entry(self.command_frame, width=8)
                         entry.insert(0, default)
                     entry.grid(row=row, column=col, padx=5, pady=5)
                     self.entries[cmd].append(entry)
                     col += 1
 
-                send_col = 4 if cmd == "stop" else col
                 send_btn = ttk.Button(self.command_frame, text="Send", command=lambda c=cmd: self.send_command(c))
-                send_btn.grid(row=row, column=send_col, padx=5, pady=5)
+                send_btn.grid(row=row, column=col, padx=5, pady=5)
 
-            self.log_frame = ttk.LabelFrame(self.main_frame, text="Command Log", padding="5")
-            self.log_frame.pack(fill="both", expand=True, pady=5)
+            # Set up a second row for the fetch button
+            fetch_btn = ttk.Button(self.command_frame, text="Fetch Received", command=self.fetch_received)
+            fetch_btn.grid(row=len(self.commands) + 1, column=0, padx=5, pady=5, sticky="w")
 
-            self.log_text = tk.Text(self.log_frame, height=20, width=70, state="disabled")
-            self.log_text.pack(side="left", fill="both", expand=True)
+            # Log frames (split vertically)
+            self.logs_frame = ttk.Frame(self.main_frame)
+            self.logs_frame.pack(fill="both", expand=True)
 
-            scrollbar = ttk.Scrollbar(self.log_frame, orient="vertical", command=self.log_text.yview)
-            scrollbar.pack(side="right", fill="y")
-            self.log_text.config(yscrollcommand=scrollbar.set)
+            # Left side: "Send Commands"
+            self.send_log_frame = ttk.LabelFrame(self.logs_frame, text="Send Commands", padding="5")
+            self.send_log_frame.pack(side="left", fill="both", expand=True)
 
-            self.clear_btn = ttk.Button(self.log_frame, text="Clear Log", command=self.clear_log)
-            self.clear_btn.pack(side="bottom", pady=5)
+            self.send_log_text = tk.Text(self.send_log_frame, height=20, width=50, state="disabled")
+            self.send_log_text.pack(side="left", fill="both", expand=True)
 
-            self.add_to_log(f"Connected to {host}:{port}")
+            self.send_scrollbar = ttk.Scrollbar(self.send_log_frame, orient="vertical", command=self.send_log_text.yview)
+            self.send_scrollbar.pack(side="right", fill="y")
+            self.send_log_text.config(yscrollcommand=self.send_scrollbar.set)
+
+            # Right side: "Received Commands"
+            self.recv_log_frame = ttk.LabelFrame(self.logs_frame, text="Received Commands", padding="5")
+            self.recv_log_frame.pack(side="left", fill="both", expand=True)
+
+            self.recv_log_text = tk.Text(self.recv_log_frame, height=20, width=50, state="disabled")
+            self.recv_log_text.pack(side="left", fill="both", expand=True)
+
+            self.recv_scrollbar = ttk.Scrollbar(self.recv_log_frame, orient="vertical", command=self.recv_log_text.yview)
+            self.recv_scrollbar.pack(side="right", fill="y")
+            self.recv_log_text.config(yscrollcommand=self.recv_scrollbar.set)
 
         def send_command(self, command: str) -> None:
             addr = self.address_vars[command].get()
-            args = [entry.get() if isinstance(entry, ttk.Entry) else entry.get() for entry in self.entries[command]]
-            command_str = f"{addr} {command} {' '.join(args)}".strip()
+            args = []
+            for entry in self.entries[command]:
+                args.append(entry.get())
+            cmd_str = f"{addr} {command} {' '.join(args)}".strip()
 
+            response = "<No response>"
             try:
                 with self.socket_lock:
                     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                         s.connect((self.host, self.port))
-                        s.sendall(command_str.encode() + b"\n")
+                        s.sendall(cmd_str.encode() + b"\n")
                         response = s.recv(1024).decode().strip()
-
-                self.add_to_log(response)
             except Exception as e:
-                self.add_to_log(f"Error: {e}")
+                response = f"Error: {e}"
 
-        def add_to_log(self, message: str) -> None:
-            self.log_text.config(state="normal")
-            self.log_text.insert("end", f"{message}\n")
-            self.log_text.config(state="disabled")
-            self.log_text.see("end")
+            self.add_to_send_log(f"CMD > {cmd_str}")
+            self.add_to_send_log(f"RESP < {response}")
 
-        def clear_log(self) -> None:
-            self.log_text.config(state="normal")
-            self.log_text.delete("1.0", tk.END)
-            self.log_text.config(state="disabled")
+        def fetch_received(self) -> None:
+            """Requests low-level messages from the server."""
+            response = "No response"
+            try:
+                with self.socket_lock:
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                        s.connect((self.host, self.port))
+                        s.sendall(b"get_received\n")
+                        response = s.recv(4096).decode().strip()
+            except Exception as e:
+                response = f"Error: {e}"
+
+            self.add_to_recv_log(response)
+
+        def add_to_send_log(self, message: str) -> None:
+            self.send_log_text.config(state="normal")
+            self.send_log_text.insert("end", f"{message}\n")
+            self.send_log_text.config(state="disabled")
+            self.send_log_text.see("end")
+
+        def add_to_recv_log(self, message: str) -> None:
+            self.recv_log_text.config(state="normal")
+            self.recv_log_text.insert("end", f"{message}\n")
+            self.recv_log_text.config(state="disabled")
+            self.recv_log_text.see("end")
 
         def run(self) -> None:
             self.root.mainloop()
