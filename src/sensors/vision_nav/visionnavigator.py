@@ -36,12 +36,12 @@ class VisionNavigator:
 
         test_frame = self.__video_source.get_next_frame()
         if test_frame is None:
-            raise RuntimeError("❌ Kein Frame erhalten – Kamera-Start prüfen")
+            raise RuntimeError("Kein Frame erhalten – Kamera-Start prüfen")
         frame_height, frame_width = test_frame.shape[:2]
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         self.__out = cv2.VideoWriter(self.__output_path, fourcc, self.__fps, (frame_width, frame_height))
         if not self.__out.isOpened():
-            self.__log.error("❌ VideoWriter konnte nicht geöffnet werden!")
+            self.__log.error("VideoWriter konnte nicht geöffnet werden!")
 
         self.__capture_thread = threading.Thread(target=self.__capture_loop)
         self.__process_thread = threading.Thread(target=self.__process_loop)
@@ -70,7 +70,7 @@ class VisionNavigator:
             frame_main = self.__video_source.get_main_frame()
 
             if frame_lores is None or frame_main is None:
-                self.__log.warning("⚠️ Kein gültiger Frame – Capture wird beendet.")
+                self.__log.warning("Kein gültiger Frame – Capture wird beendet.")
                 # self.__running = False
                 threading.Thread(target=self.stop, daemon=True).start()
                 break
@@ -80,10 +80,10 @@ class VisionNavigator:
             except Full:
                 try:
                     self.__capture_queue.get_nowait()  # Ältesten rauswerfen
-                    self.__log.warning("♻️ Ältesten Frame entfernt – aktueller bevorzugt.")
+                    self.__log.warning("Ältesten Frame entfernt – aktueller bevorzugt.")
                     self.__capture_queue.put_nowait((frame_lores, frame_main))
                 except Empty:
-                    self.__log.warning("🚫 Unerwartet: Queue war doch leer.")
+                    self.__log.warning("Unerwartet: Queue war doch leer.")
 
     def __process_loop(self):
         detector = Detector(np.zeros((640, 640, 3), dtype=np.uint8))
@@ -116,16 +116,16 @@ class VisionNavigator:
                     try:
                         self.__write_queue.put(processed_frame, timeout=0.1)
                     except Full:
-                        self.__log.warning("⚠️ Write-Queue voll – Frame verworfen.")
+                        self.__log.warning("Write-Queue voll – Frame verworfen.")
                     
                     frame_count += 1
                     if frame_count % 50 == 0:
                         elapsed = time.time() - start_time
-                        self.__log.info(f"⏱ FPS Ø: {frame_count / elapsed:.2f}")
+                        self.__log.info(f"FPS Ø: {frame_count / elapsed:.2f}")
                         mem = psutil.virtual_memory()
-                        self.__log.info(f"📉 RAM usage: {mem.percent}%")
+                        self.__log.info(f"RAM usage: {mem.percent}%")
             except Exception as e:
-                self.__log.warning(f"❌ Fehler in process_loop: {e}")
+                self.__log.warning(f"Fehler in process_loop: {e}")
             finally:
                 self.__capture_queue.task_done()  # <-- nur sicher, weil `get()` erfolgreich war            
 
@@ -135,13 +135,13 @@ class VisionNavigator:
                 frame = self.__write_queue.get(timeout=1)
                 self.__out.write(frame)
                 self.__write_queue.task_done()
-                self.__log.debug("📝 Frame written and task done.")
+                self.__log.debug("Frame written and task done.")
             except Empty:
                 # Wenn running bereits False ist, warte einfach auf weitere Elemente
                 if not self.__running:
                     time.sleep(0.1)
             except Exception as e:
-                self.__log.warning(f"📝 Writer thread error: {e}")
+                self.__log.warning(f"Writer thread error: {e}")
 
     def stop(self):
         self.__running = False
@@ -161,7 +161,7 @@ class VisionNavigator:
 
         if self.__out:
             self.__out.release()
-            self.__log.info("📼 VideoWriter released")
+            self.__log.info("VideoWriter released")
 
         if self.__debug: self.reencode_video()
         
@@ -187,14 +187,14 @@ class VisionNavigator:
 
         try:
             subprocess.run(command, check=True)
-            self.__log.info(f"✅ Video re-encoded: {fixed_output_path}")
+            self.__log.info(f"Video re-encoded: {fixed_output_path}")
             os.remove(self.__output_path)
             os.rename(fixed_output_path, self.__output_path)
-            self.__log.info("🔁 Output file replaced with re-encoded version.")
+            self.__log.info("Output file replaced with re-encoded version.")
         except subprocess.CalledProcessError as e:
-            self.__log.error(f"❌ FFmpeg failed: {e}")
+            self.__log.error(f"FFmpeg failed: {e}")
         except OSError as e:
-            self.__log.error(f"⚠️ File error: {e}")
+            self.__log.error(f"File error: {e}")
 
     def run_timed(self, seconds):
         if isinstance(self.__video_source, FileSource):
@@ -211,7 +211,7 @@ class VisionNavigator:
         self.__stopped_event.wait()
 
     def __wait_for_keypress(self):
-        self.__log.info("🔴 Press ENTER to stop recording...")
+        self.__log.info("Press ENTER to stop recording...")
         input()
         self.stop()
 
