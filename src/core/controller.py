@@ -16,7 +16,7 @@ class HighLevelController:
         self.uart_manager = UartManager(uart_port, uart_baudrate)
 
         self.camera = CameraSensor(device_index=0)
-        self.camera = VisionNavigator()
+        #self.camera = VisionNavigator()
         self.lidar = LidarSensor(bus=lidar_bus, address=lidar_address)
 
         self.graph = Graph()
