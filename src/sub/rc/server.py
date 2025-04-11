@@ -56,4 +56,5 @@ def start_server(
 
     t_server = threading.Thread(target=server_loop, daemon=True)
     t_server.start()
+
     return t_server
