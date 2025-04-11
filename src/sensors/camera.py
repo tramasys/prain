@@ -32,3 +32,6 @@ class CameraSensor:
         if self._thread:
             self._thread.join()
         self.cap.release()
+    
+    def t(self):
+        pass
