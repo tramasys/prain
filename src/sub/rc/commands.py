@@ -54,10 +54,12 @@ def execute_command(uart_mgr: UartManager, command_str: str) -> str:
             data = int(parts[3])
             uart_mgr.send_frame(encode_response(addr, poll_id, data))
             return f"{addr.name} RESPONSE poll_id={poll_id}, data={data}"
-        elif cmd == "crane" and len(parts) == 3:
-            flag = CraneFlag[parts[2].upper()].value
-            uart_mgr.send_frame(encode_crane(addr, flag))
-            return f"{addr.name} CRANE flag={flag}"
+        elif cmd == "grip" and len(parts) == 2:
+            uart_mgr.send_frame(encode_grip(addr))
+            return f"{addr.name} GRIP"
+        elif cmd == "release" and len(parts) == 2:
+            uart_mgr.send_frame(encode_release(addr))
+            return f"{addr.name} RELEASE"
         else:
             return f"Error: Unknown command or invalid arguments: {command_str}"
     except (KeyError, ValueError) as e:

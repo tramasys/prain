@@ -16,7 +16,8 @@ def encode_test(uart_interface: UartInterface) -> None:
         encode_error(Address.MOTION_CTRL, ErrorCode.INVALID_CRC),
         encode_poll(Address.MOTION_CTRL, PollId.DISTANCE),
         encode_response(Address.MOTION_CTRL, PollId.DISTANCE, 420),
-        encode_crane(Address.MOTION_CTRL, CraneFlag.UP),
+        encode_grip(Address.MOTION_CTRL),
+        encode_release(Address.MOTION_CTRL)
     ]
 
     try:

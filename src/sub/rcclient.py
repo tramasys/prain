@@ -3,7 +3,7 @@ from tkinter import ttk
 import socket
 from threading import Lock
 from typing import List, Tuple
-from prain_uart import Address, InfoFlag, CraneFlag, PollId
+from prain_uart import Address, InfoFlag, PollId
 
 def rc_client(host: str = "localhost", port: int = 5000) -> None:
     class RemoteControlClient:
@@ -27,7 +27,8 @@ def rc_client(host: str = "localhost", port: int = 5000) -> None:
                 ("error", [("Error Code (0-65535)", "0")]),
                 ("poll", [("Poll ID", [p.name for p in PollId])]),
                 ("response", [("Poll ID", [p.name for p in PollId]), ("Data (0-65535)", "0")]),
-                ("crane", [("Flag", [c.name for c in CraneFlag])]),
+                ("grip", []),
+                ("release", []),
             ]
 
             self.main_frame = ttk.Frame(self.root, padding="10")

@@ -30,8 +30,6 @@ def print_frame(frame: Frame) -> None:
             print(f"Params: Poll id={params.poll_id}")
         elif isinstance(params, ResponseParams):
             print(f"Params: Response poll_id={params.poll_id}, data={params.data}")
-        elif isinstance(params, CraneParams):
-            print(f"Params: Crane flag={params.flag}")
         else:
             print("Params: Unknown type")
     except ValueError as e:
