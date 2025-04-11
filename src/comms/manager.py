@@ -27,6 +27,7 @@ class UartManager:
     def _reader_loop(self) -> None:
         while not self._stop_event.is_set():
             frame = self._uart.receive_frame()
+            print(f"LOW-LEVEL RX: raw=0x{frame.raw:016X}")
             if frame is not None:
                 self.rx_queue.put(frame)
 

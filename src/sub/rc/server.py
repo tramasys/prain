@@ -11,6 +11,10 @@ def logger_loop(uart_manager: UartManager) -> None:
     while True:
         frame = uart_manager.rx_queue.get()
         text = f"LOW-LEVEL RX: raw=0x{frame.raw:016X}"
+        frame_hex = f"Ox{frame.raw:016X}"
+        frame_bin = f"0b{frame.raw:064b}"
+        print(frame_hex)
+        print(frame_bin)
         received_queue.put(text)
 
 def start_server(
