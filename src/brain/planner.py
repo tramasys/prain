@@ -5,13 +5,12 @@ from prain_uart import *
 from brain.graph import Graph
 
 class NavState(Enum):
-    TRAVELING_EDGE              = 1
-    ARRIVED_AT_POTENTIAL_NODE   = 2
-    ARRIVED_AT_NODE             = 3
-    DECIDING_NEXT_ANGLE         = 4
-    CHECK_NEXT_ANGLE            = 5
-    GOAL_REACHED                = 6
-    BLOCKED                     = 7
+    TRAVELING_EDGE      = 1
+    ARRIVED_AT_NODE     = 3
+    DECIDING_NEXT_ANGLE = 4
+    CHECK_NEXT_ANGLE    = 5
+    GOAL_REACHED        = 6
+    BLOCKED             = 7
 
 class PathPlanner:
     def __init__(self, graph: Graph, target_node: str, logger: logging.Logger):
@@ -40,8 +39,6 @@ class PathPlanner:
     def next_action(self, sensor_data: dict) -> tuple[Frame | None, str]:
         """
         sensor_data["camera"] => {
-          "node_detected": bool,
-          "potential_node_detected": bool,
           "angles": list[int]
         }
         sensor_data["lidar"] => (dist_cm, flux, temp)
@@ -50,34 +47,17 @@ class PathPlanner:
         lidar  = sensor_data.get("lidar", (None, None, None))
         dist_cm, _, _ = lidar
 
-        node_detected           = camera.get("node_detected", False)
-        potential_node_detected = camera.get("potential_node_detected", False)
-        angles                  = camera.get("angles", [])
+        angles = camera.get("angles", [])
 
         # ---------------- TRAVELING_EDGE ----------------
         if self.state == NavState.TRAVELING_EDGE:
             self.logger.debug(f"Traveling from {self.current_node}")
 
-            if node_detected:
+            if angles:  # Angles present means we've arrived at a node
                 self.current_node = self._infer_next_node(self.current_node, self.last_chosen_angle)
                 self.state = NavState.ARRIVED_AT_NODE
                 self.logger.info(f"Arrived at node {self.current_node}")
                 return encode_stop(Address.MOTION_CTRL), self.current_node
-
-            elif potential_node_detected:
-                self.state = NavState.ARRIVED_AT_POTENTIAL_NODE
-                self.logger.debug("Detected potential node")
-                return encode_stop(Address.MOTION_CTRL), self.current_node
-
-            return None, self.current_node
-
-        # ---------- ARRIVED_AT_POTENTIAL_NODE ----------
-        elif self.state == NavState.ARRIVED_AT_POTENTIAL_NODE:
-            if node_detected:
-                self.current_node = self._infer_next_node(self.current_node, self.last_chosen_angle)
-                self.state = NavState.ARRIVED_AT_NODE
-
-                self.logger.info(f"Confirmed arrival at node {self.current_node}")
 
             return None, self.current_node
 
@@ -85,7 +65,6 @@ class PathPlanner:
         elif self.state == NavState.ARRIVED_AT_NODE:
             if self.current_node == self.target_node:
                 self.state = NavState.GOAL_REACHED
-
                 self.logger.info("Goal reached!")
                 return encode_stop(Address.MOTION_CTRL), self.current_node
 
@@ -102,13 +81,11 @@ class PathPlanner:
         elif self.state == NavState.DECIDING_NEXT_ANGLE:
             if not self.angles_from_camera:
                 self.state = NavState.BLOCKED
-
                 self.logger.warning(f"No angles available at {self.current_node}, marking as blocked")
                 return encode_stop(Address.MOTION_CTRL), self.current_node
 
             if self.current_angle_index >= len(self.angles_from_camera):
                 self.state = NavState.BLOCKED
-
                 self.logger.warning(f"All angles tried at {self.current_node}, marking as blocked")
                 return encode_stop(Address.MOTION_CTRL), self.current_node
 
@@ -151,23 +128,18 @@ class PathPlanner:
 
     def _sort_angles_by_pathfinding(self, angles: list[int]) -> list[int]:
         """Sort angles based on section scoring and hop distance to target_node."""
-
         target_section = self.graph.get_node_section(self.target_node)
         current_section = self.graph.get_node_section(self.current_node)
 
-        # Score each angle based on potential next nodes
         angle_scores = []
         for angle in angles:
-            # Infer potential next node (best guess without direct mapping)
             potential_node = self._infer_potential_node(self.current_node, angle)
             if potential_node and potential_node not in self.visited_nodes:
                 score = self._score_node(potential_node, target_section, current_section)
                 angle_scores.append((angle, score))
             else:
-                # Penalize angles leading to visited or unknown nodes
                 angle_scores.append((angle, -float('inf')))
 
-        # Sort by score (highest first) and return just the angles
         angle_scores.sort(key=lambda x: x[1], reverse=True)
         sorted_angles = [angle for angle, _ in angle_scores]
 
@@ -176,15 +148,12 @@ class PathPlanner:
 
     def _score_node(self, next_node: str, target_section: str, current_section: str) -> float:
         """Score a node based on section and hop distance."""
-
         next_section = self.graph.get_node_section(next_node)
 
-        # Hop distance as a proxy for direction
         hop_distance_to_target = self._estimate_hop_distance(next_node, self.target_node)
         hop_distance_from_current = self._estimate_hop_distance(self.current_node, self.target_node)
         direction_score = 1.0 if hop_distance_to_target < hop_distance_from_current else -1.0
 
-        # Section scoring
         target_distance = self._get_section_distance(next_section, target_section)
         current_distance = self._get_section_distance(current_section, target_section)
 
@@ -204,11 +173,10 @@ class PathPlanner:
 
     def _estimate_hop_distance(self, start_node: str, target_node: str) -> int:
         """Estimate hop distance to target_node using BFS."""
-
         if start_node == target_node:
             return 0
         visited = {start_node}
-        queue = [(start_node, 0)] # (node, distance)
+        queue = [(start_node, 0)]  # (node, distance)
         while queue:
             node, dist = queue.pop(0)
             for neighbor, traversable in self.graph.get_neighbors(node).items():
@@ -221,13 +189,11 @@ class PathPlanner:
 
     def _get_section_distance(self, from_section: str, to_section: str) -> int:
         """Calculate distance between sections."""
-
         sections = ["left", "middle", "right"]
         return abs(sections.index(from_section) - sections.index(to_section))
 
     def _infer_next_node(self, current_node: str, angle: int) -> str:
         """Infer the next node after moving along an angle."""
-
         neighbors = self.graph.get_neighbors(current_node)
         viable_neighbors = [n for n, t in neighbors.items() if t and n not in self.visited_nodes]
 
@@ -241,7 +207,6 @@ class PathPlanner:
 
     def _infer_potential_node(self, current_node: str, angle: int) -> str | None:
         """Infer a potential next node for scoring, without direct angle mapping."""
-
         neighbors = self.graph.get_neighbors(current_node)
         viable_neighbors = [n for n, t in neighbors.items() if t and n not in self.visited_nodes]
         if not viable_neighbors:
