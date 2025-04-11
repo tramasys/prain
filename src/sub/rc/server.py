@@ -2,7 +2,7 @@ import threading
 import queue
 import socket
 from comms.manager import UartManager
-from commands import execute_command
+from .commands import execute_command
 
 received_queue = queue.Queue()
 
