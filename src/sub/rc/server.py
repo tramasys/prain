@@ -9,6 +9,7 @@ received_queue = queue.Queue()
 def logger_loop(uart_manager: UartManager) -> None:
     """Continuously read frames from UartManager's rx_queue, store them in received_queue."""
     while True:
+        print("logger_loop: waiting for frame")
         frame = uart_manager.rx_queue.get()
         text = f"LOW-LEVEL RX: raw=0x{frame.raw:016X}"
         print(f"Put in queue: 0x{frame.raw:016X}")
