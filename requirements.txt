@@ -1,3 +1,6 @@
 opencv-python>=4.5.0
 prain_uart>=1.0.0
 pyserial>=3.5
+numpy
+picamera2
+scikit-learn
