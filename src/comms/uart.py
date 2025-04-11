@@ -28,12 +28,14 @@ class UartInterface:
 
     def receive_frame(self) -> Optional[Frame]:
         data = self.serial.read(8)
+
         if len(data) == 8:
             raw = int.from_bytes(data, "little")
-            print(raw)
-            print(f"LOW-LEVEL RX: raw=0x{raw:016X}")
+            print(f"UART-IFACE: 0b{raw:064b}")
+            print(f"UART-IFACE: 0x{raw:016X}")
             frame = Frame()
             return frame.set_raw(raw)
+
         return None
 
     def close(self) -> None:
