@@ -65,15 +65,18 @@ class CameraSource(VideoSource):
         self.__latest_frame_main = None
         self.__latest_frame_lores = None
 
-        self.__camera = Picamera2()
-        self.__camera.video_configuration.controls.FrameRate = self.__fps
-        self.__camera.configure(
-            self.__camera.create_video_configuration(
-                main={"size": self.__resolution, "format": "YUV420"},
-                lores={"size": (320, 320), "format": "YUV420"}
-            )
-        )
         self.__log = logging.getLogger(self.__class__.__name__)
+        try:
+            self.__camera = Picamera2()
+            self.__camera.video_configuration.controls.FrameRate = self.__fps
+            self.__camera.configure(
+                self.__camera.create_video_configuration(
+                    main={"size": self.__resolution, "format": "YUV420"},
+                    lores={"size": (320, 320), "format": "YUV420"}
+                )
+            )
+        except:
+            self.__log.error(f'Picamera2 not instantiated!')
 
     def __frame_callback(self, request):
         with self.__frame_lock:
