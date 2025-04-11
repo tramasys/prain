@@ -43,11 +43,11 @@ class PathPlanner:
         }
         sensor_data["lidar"] => (dist_cm, flux, temp)
         """
-        camera = sensor_data.get("camera", {})
+        angles = sensor_data.get("camera-angles", [])
         lidar  = sensor_data.get("lidar", (None, None, None))
         dist_cm, _, _ = lidar
 
-        angles = camera.get("angles", [])
+        # angles = camera.get("angles", [])
 
         # ---------------- TRAVELING_EDGE ----------------
         if self.state == NavState.TRAVELING_EDGE:

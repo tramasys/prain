@@ -4,6 +4,8 @@ import logging
 
 from comms.manager import UartManager
 from sensors.camera import CameraSensor
+from sensors.vision_nav.visionnavigator import VisionNavigator
+from sensors.vision_nav.source import CameraSource
 from sensors.lidar import LidarSensor
 from brain.planner import PathPlanner
 from brain.graph import Graph
@@ -14,6 +16,7 @@ class HighLevelController:
         self.uart_manager = UartManager(uart_port, uart_baudrate)
 
         self.camera = CameraSensor(device_index=0)
+        self.camera = VisionNavigator()
         self.lidar = LidarSensor(bus=lidar_bus, address=lidar_address)
 
         self.graph = Graph()
@@ -33,7 +36,7 @@ class HighLevelController:
     def _main_loop(self):
         while self.keep_running:
             sensor_data = {
-                "camera": self.camera.get_data(),
+                "camera-angles": self.camera.get_data(),
                 "lidar":  self.lidar.get_data(),
             }
 
