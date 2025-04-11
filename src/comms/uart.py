@@ -32,7 +32,8 @@ class UartInterface:
             raw = int.from_bytes(data, "little")
             print(raw)
             print(f"LOW-LEVEL RX: raw=0x{raw:016X}")
-            return Frame.set_raw(raw)
+            frame = Frame
+            return frame.set_raw(raw)
         return None
 
     def close(self) -> None:
