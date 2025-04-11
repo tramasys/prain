@@ -30,6 +30,7 @@ class UartInterface:
         data = self.serial.read(8)
         if len(data) == 8:
             raw = int.from_bytes(data, "little")
+            print(f"LOW-LEVEL RX: raw=0x{raw:016X}")
             return Frame.set_raw(raw)
         return None
 
