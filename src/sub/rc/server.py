@@ -35,7 +35,6 @@ def start_server(
             while True:
                 conn, addr = server.accept()
                 with conn:
-                    print(f"Connected by {addr}")
                     data = conn.recv(1024).decode().strip()
                     if not data:
                         continue
@@ -46,6 +45,8 @@ def start_server(
                             logs.append(received_queue.get())
                         if logs:
                             response = "\n".join(logs)
+                        else:
+                            response = ""
                         conn.sendall(response.encode())
                     else:
                         result = execute_command(uart_manager, data)
