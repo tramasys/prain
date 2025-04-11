@@ -11,10 +11,7 @@ def logger_loop(uart_manager: UartManager) -> None:
     while True:
         frame = uart_manager.rx_queue.get()
         text = f"LOW-LEVEL RX: raw=0x{frame.raw:016X}"
-#        frame_hex = f"Ox{frame.raw:016X}"
-#        frame_bin = f"0b{frame.raw:064b}"
-#        print(frame_hex)
-#        print(frame_bin)
+        print(f"Put in queue: 0x{frame.raw:016X}")
         received_queue.put(text)
 
 def start_server(
@@ -50,7 +47,7 @@ def start_server(
                         if logs:
                             response = "\n".join(logs)
                         else:
-                            response = ""
+                            response = "..."
                         conn.sendall(response.encode())
                     else:
                         result = execute_command(uart_manager, data)
