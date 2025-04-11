@@ -29,6 +29,7 @@ class UartManager:
             frame = self._uart.receive_frame()
             if frame is not None:
                 #print(f"LOW-LEVEL RX: raw=0x{frame.raw:016X}")
+                print(f"DEBUG: Pushing frame 0x{frame.raw:016X} to rx_queue")
                 self.rx_queue.put(frame)
 
     def _writer_loop(self) -> None:
