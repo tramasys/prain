@@ -1,3 +1,4 @@
+from queue import Empty
 import threading
 import time
 import logging
@@ -21,6 +22,7 @@ class HighLevelController:
 
         self.graph = Graph()
         self.planner = PathPlanner(graph=self.graph, target_node=target_node, logger=logger)
+        self.logger = logger
 
         self.keep_running = True
         self._decision_thread = None
@@ -41,8 +43,12 @@ class HighLevelController:
             }
 
             inbound_data = []
-            while not self.uart_manager.rx_queue.empty():
-                frame = self.uart_manager.rx_queue.get()
+            while True:
+                try:
+                    frame = self.uart_manager.rx_queue.get_nowait()
+                except Empty:
+                    break
+
                 decoder = Decoder(frame)
                 if decoder.verify_crc():
                     inbound_data.append((decoder.command, decoder.get_params()))
