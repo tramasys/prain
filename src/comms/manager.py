@@ -26,20 +26,22 @@ class UartManager:
 
     def _reader_loop(self) -> None:
         while not self._stop_event.is_set():
-            #print("DEBUG: _reader_loop attempting to read frame")
+            print("[MANAGER] _reader_loop attempting to read frame")
             frame = self._uart.receive_frame()
             if frame is not None:
-                #print(f"DEBUG: _reader_loop got frame 0x{frame.raw:016X}")
+                print(f"[MANAGER] _reader_loop got frame 0x{frame.raw:016X}")
                 self.rx_queue.put(frame)
             #else:
-                #print("DEBUG: _reader_loop got None")
+                print("[MANAGER] _reader_loop got None")
 
 
     def _writer_loop(self) -> None:
         while not self._stop_event.is_set():
+            #print("DEBUG: _writer_loop attempting to send frame")
             try:
                 frame = self.tx_queue.get(timeout=0.1)
                 self._uart.send_frame(frame)
+                print(f"DEBUG: _writer_loop sent frame 0x{frame.raw:016X}")
             except Empty:
                 pass  # No frame in queue during this cycle
 

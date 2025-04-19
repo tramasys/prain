@@ -6,6 +6,7 @@ from sub.etest import encode_test
 from sub.ldtest import lidar_test
 from sub.rc import rc_server
 from sub.rcclient import rc_client
+from sub.stest import send_test
 from cli import parse_args
 from comms.uart import UartInterface
 from core.controller import HighLevelController
@@ -47,9 +48,15 @@ def main():
         encode_test(uart)
         uart.close()
 
+    def run_stest():
+        uart = UartInterface(args.uart, args.uart_baudrate)
+        send_test(uart)
+        uart.close()
+
     subprogram_handlers = {
         "dtest":    run_dtest,
         "etest":    run_etest,
+        "stest":    run_stest,
         "rcserver": lambda: rc_server(args.uart, args.uart_baudrate, args.host, args.port),
         "rcclient": lambda: rc_client(args.host, args.port),
         "ldtest":   lambda: lidar_test(args.lidar, args.lidar_address),

@@ -121,7 +121,6 @@ def rc_client(host: str = "localhost", port: int = 5000) -> None:
                 response = f"Error: {e}"
 
             self.add_to_send_log(cmd_str)
-            # self.add_to_send_log(f"RESP < {response}")
 
         def poll_received(self):
             """Continuously poll for new messages from the server."""
@@ -145,6 +144,9 @@ def rc_client(host: str = "localhost", port: int = 5000) -> None:
             self.send_log_text.see("end")
 
         def add_to_recv_log(self, message: str):
+            if not message:
+                return
+
             self.recv_log_text.config(state="normal")
             self.recv_log_text.insert("end", f"{message}\n")
             self.recv_log_text.config(state="disabled")
