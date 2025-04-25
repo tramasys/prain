@@ -39,7 +39,7 @@ class HighLevelController:
         while self.keep_running:
             sensor_data = {
                 "camera-angles": self.camera.get_data(),
-                "lidar":  self.lidar.get_data(),
+                "lidar": self.lidar.get_data(),
             }
 
             inbound_data = []
@@ -56,7 +56,7 @@ class HighLevelController:
                 else:
                     self.logger.warning(f"Invalid CRC for frame: addr={frame.addr}, cmd={frame.cmd}")
 
-            command, current_node = self.planner.next_action(sensor_data)
+            command, current_node = self.planner.next_action(sensor_data, inbound_data)
             if command is not None:
                 self.uart_manager.send_frame(command)
 

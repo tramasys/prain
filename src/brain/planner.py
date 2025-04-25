@@ -23,7 +23,7 @@ class PathPlanner:
         self.state = NavState.ARRIVED_AT_NODE
         self.logger.info(f"Initialized planner at node {self.current_node} with target {self.target_node}")
 
-        self.visited_nodes    = set()
+        self.visited_nodes       = set()
         self.current_orientation = 0
         self.node_orientation    = 0
         self.angles_from_camera  = []
@@ -37,7 +37,7 @@ class PathPlanner:
         self.RETURN_BOOST = 2
         self.FURTHER_AWAY_PENALTY = -2
 
-    def next_action(self, sensor_data: dict) -> tuple[Frame | None, str]:
+    def next_action(self, sensor_data: dict, inbound_data) -> tuple[Frame | None, str]:
         """
         sensor_data["camera"] => {
           "angles": list[int]
@@ -146,7 +146,7 @@ class PathPlanner:
 
         self.logger.debug(f"Sorted angles at {self.current_node}: {sorted_angles}")
         return sorted_angles
-    
+
     def _get_random_angle(self, angles: list[int]) -> int:
         return random.choice(angles)
 
