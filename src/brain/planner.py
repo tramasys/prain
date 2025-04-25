@@ -1,5 +1,6 @@
 from enum import Enum
 import logging
+import random
 
 from prain_uart import *
 from brain.graph import Graph
@@ -89,7 +90,7 @@ class PathPlanner:
                 self.logger.warning(f"All angles tried at {self.current_node}, marking as blocked")
                 return encode_stop(Address.MOTION_CTRL), self.current_node
 
-            angle_choice = self.angles_from_camera[self.current_angle_index]
+            angle_choice = self._get_random_angle(angles) # self.angles_from_camera[self.current_angle_index]
             turn_amount = angle_choice - self.node_orientation
             self.current_orientation = angle_choice
             self.last_chosen_angle = angle_choice
@@ -145,6 +146,9 @@ class PathPlanner:
 
         self.logger.debug(f"Sorted angles at {self.current_node}: {sorted_angles}")
         return sorted_angles
+    
+    def _get_random_angle(self, angles: list[int]) -> int:
+        return random.choice(angles)
 
     def _score_node(self, next_node: str, target_section: str, current_section: str) -> float:
         """Score a node based on section and hop distance."""
