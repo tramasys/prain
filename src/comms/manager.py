@@ -4,7 +4,7 @@ from queue import Queue, Empty
 from typing import Optional
 
 from .uart import UartInterface
-from prain_uart import Frame
+from prain_uart import *
 
 class UartManager:
     def __init__(self, port: str, baudrate: int = 115200):
@@ -30,6 +30,11 @@ class UartManager:
             frame = self._uart.receive_frame()
             if frame is not None:
                 print(f"[MANAGER] _reader_loop got frame 0x{frame.raw:016X}")
+                # decoded frame for debugoutput
+                dec = Decoder(frame)
+                cmd, params = (dec.command, dec.get_params())
+                print(f"[MANAGER] _reader_loop got command {cmd.name} with params {params}")
+
                 self.rx_queue.put(frame)
             #else:
                 print("[MANAGER] _reader_loop got None")
