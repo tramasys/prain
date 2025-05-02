@@ -57,7 +57,7 @@ class PathPlanner:
 
         if self.state == NavState.BEGIN:
             self.logger.debug("DEBUG: BEGIN state")
-            #self.state = NavState.ARRIVED_AT_NODE
+            self.state = NavState.TRAVELING_EDGE
             return encode_move(Address.MOTION_CTRL, 0), self.current_node
 
         # ---------------- TRAVELING_EDGE ----------------
