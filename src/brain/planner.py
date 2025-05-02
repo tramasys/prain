@@ -28,6 +28,7 @@ class PathPlanner:
         self.current_orientation = 0
         self.node_orientation    = 0
         self.angles_from_camera  = []
+        self.angles = None
         self.current_angle_index = 0
         self.last_chosen_angle   = None
 
@@ -46,11 +47,13 @@ class PathPlanner:
         sensor_data["lidar"] => (dist_cm, flux, temp)
         """
         angles = sensor_data.get("camera-angles", [])
+        if angles:
+            self.angles = angles
         self.logger.debug(f'angles detected: {angles}')
         lidar  = sensor_data.get("lidar", (None, None, None))
         dist_cm, _, _ = lidar
 
-        print(f"DEBUG: next_action called with angles: {angles}, lidar: {lidar}")
+        print(f"DEBUG: next_action called with angles: {self.angles}, lidar: {lidar}")
         print(f"{self.state}")
 
         # angles = camera.get("angles", [])
@@ -64,8 +67,9 @@ class PathPlanner:
         if self.state == NavState.TRAVELING_EDGE:
             self.logger.debug(f"Traveling from {self.current_node}")
 
-            if angles:  # Angles present means we've arrived at a node
+            if self.angles:  # Angles present means we've arrived at a node
                 self.current_node = self._infer_next_node(self.current_node, self.last_chosen_angle)
+                self.angles = None
                 self.state = NavState.ARRIVED_AT_NODE
                 self.logger.info(f"Arrived at node {self.current_node}")
                 return encode_stop(Address.MOTION_CTRL), self.current_node
@@ -80,7 +84,7 @@ class PathPlanner:
                 self.logger.info("Goal reached!")
                 return encode_stop(Address.MOTION_CTRL), self.current_node
 
-            self.angles_from_camera = self._sort_angles_by_pathfinding(angles)
+            self.angles_from_camera = self._sort_angles_by_pathfinding(self.angles)
             self.current_angle_index = 0
             self.node_orientation = self.current_orientation
             self.visited_nodes.add(self.current_node)
