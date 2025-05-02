@@ -37,6 +37,8 @@ class HighLevelController:
 
     def _main_loop(self):
         while self.keep_running:
+            print("DEBUG: _main_loop running")
+
             sensor_data = {
                 "camera-angles": self.camera.get_data(),
                 "lidar": self.lidar.get_data(),
