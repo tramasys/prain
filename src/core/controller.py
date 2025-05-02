@@ -37,8 +37,6 @@ class HighLevelController:
 
     def _main_loop(self):
         while self.keep_running:
-            #print("DEBUG: _main_loop running")
-
             sensor_data = {
                 "camera-angles": self.camera.get_data(),
                 "lidar": self.lidar.get_data(),
@@ -61,6 +59,7 @@ class HighLevelController:
             command, current_node = self.planner.next_action(sensor_data, inbound_data)
             if command is not None:
                 self.uart_manager.send_frame(command)
+
                 decoder = Decoder(command)
                 if decoder.command.name == 'TURN':
                     time.sleep(1)
