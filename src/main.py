@@ -28,7 +28,7 @@ def main_loop(args) -> None:
 
     try:
         while True:
-            logger.info("Keeping main loop iteration alive ...")
+            #logger.info("Keeping main loop iteration alive ...")
             time.sleep(0.1)
     except KeyboardInterrupt:
         logger.info("SHUTTING DOWN")
