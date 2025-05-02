@@ -45,6 +45,7 @@ class PathPlanner:
         sensor_data["lidar"] => (dist_cm, flux, temp)
         """
         angles = sensor_data.get("camera-angles", [])
+        self.logger.debug(f'angles detected: {angles}')
         lidar  = sensor_data.get("lidar", (None, None, None))
         dist_cm, _, _ = lidar
 
@@ -93,6 +94,7 @@ class PathPlanner:
                 return encode_stop(Address.MOTION_CTRL), self.current_node
 
             angle_choice = self._get_random_angle(angles) # self.angles_from_camera[self.current_angle_index]
+            self.logger.debug(f'angle chosen: {angle_choice}')
             turn_amount = angle_choice - self.node_orientation
             self.current_orientation = angle_choice
             self.last_chosen_angle = angle_choice
