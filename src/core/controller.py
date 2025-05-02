@@ -61,6 +61,9 @@ class HighLevelController:
             command, current_node = self.planner.next_action(sensor_data, inbound_data)
             if command is not None:
                 self.uart_manager.send_frame(command)
+                decoder = Decoder(command)
+                if decoder.command.name == 'TURN':
+                    time.sleep(1)
 
             time.sleep(0.05)
 

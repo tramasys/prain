@@ -29,6 +29,10 @@ class VisionNavigator:
         self.__capture_thread = None
         self.__process_thread = None
         self.__stopped_event = threading.Event()
+        
+    def __capture_and_write_loop(self):
+        self.__capture_loop()
+        self.__writer_loop()
 
     def start(self):
         self.__running = True

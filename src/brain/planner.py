@@ -1,6 +1,7 @@
 from enum import Enum
 import logging
 import random
+import time
 
 from prain_uart import *
 from brain.graph import Graph
@@ -49,7 +50,7 @@ class PathPlanner:
         angles = sensor_data.get("camera-angles", [])
         if angles:
             self.angles = angles
-        self.logger.debug(f'angles detected: {angles}')
+        print(f'angles detected: {angles}')
         lidar  = sensor_data.get("lidar", (None, None, None))
         dist_cm, _, _ = lidar
 
@@ -78,10 +79,12 @@ class PathPlanner:
         # --------------- ARRIVED_AT_NODE ---------------
         elif self.state == NavState.ARRIVED_AT_NODE:
             print(f"DEBUG: STATE ARRIVED_AT_NODE")
+            """
             if self.current_node == self.target_node:
                 self.state = NavState.GOAL_REACHED
                 self.logger.info("Goal reached!")
                 return encode_stop(Address.MOTION_CTRL), self.current_node
+            """
 
             self.angles_from_camera = self._sort_angles_by_pathfinding(self.angles)
             self.current_angle_index = 0
@@ -104,18 +107,23 @@ class PathPlanner:
                 self.logger.warning(f"All angles tried at {self.current_node}, marking as blocked")
                 return encode_stop(Address.MOTION_CTRL), self.current_node
 
-            angle_choice = self._get_random_angle(self.angles) # self.angles_from_camera[self.current_angle_index]
-            self.logger.debug(f'angle chosen: {angle_choice}')
-            turn_amount = angle_choice - self.node_orientation
+            angle_choice = self._get_random_angle(self.angles)
+            while 170 < angle_choice < 190:
+                angle_choice = self._get_random_angle(self.angles) # self.angles_from_camera[self.current_angle_index]
+            print(f'angle chosen: {angle_choice}')
+            # turn_amount = angle_choice - self.node_orientation
+            turn_amount = 360 - angle_choice if angle_choice > 180 else -angle_choice
             self.current_orientation = angle_choice
             self.last_chosen_angle = angle_choice
             self.state = NavState.CHECK_NEXT_ANGLE
 
             self.logger.debug(f"Turning to angle {angle_choice} (turn amount: {turn_amount})")
+            turn_amount = turn_amount * 10
             return encode_turn(Address.MOTION_CTRL, turn_amount), self.current_node
 
         # -------------- CHECK_NEXT_ANGLE ---------------
         elif self.state == NavState.CHECK_NEXT_ANGLE:
+            """
             if dist_cm is not None and dist_cm <= 200:
                 revert_turn = self.node_orientation - self.current_orientation
                 self.current_orientation = self.node_orientation
@@ -123,13 +131,15 @@ class PathPlanner:
                 self.state = NavState.DECIDING_NEXT_ANGLE
 
                 self.logger.warning(f"Angle {self.last_chosen_angle} blocked (dist: {dist_cm}cm), reverting")
+                revert_turn = revert_turn * 10
                 return encode_turn(Address.MOTION_CTRL, revert_turn), self.current_node
 
             else:
-                self.state = NavState.TRAVELING_EDGE
-                self.angles = None
-                self.logger.info(f"Angle {self.last_chosen_angle} clear (dist: {dist_cm}cm), moving forward")
-                return encode_move(Address.MOTION_CTRL, 0), self.current_node
+            """
+            self.state = NavState.TRAVELING_EDGE
+            self.angles = None
+            self.logger.info(f"Angle {self.last_chosen_angle} clear (dist: {dist_cm}cm), moving forward")
+            return encode_move(Address.MOTION_CTRL, 0), self.current_node
 
         # ---------------- GOAL_REACHED -----------------
         elif self.state == NavState.GOAL_REACHED:
