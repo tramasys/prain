@@ -26,7 +26,7 @@ class UartManager:
 
     def _reader_loop(self) -> None:
         while not self._stop_event.is_set():
-            print("[MANAGER] _reader_loop attempting to read frame")
+            #print("[MANAGER] _reader_loop attempting to read frame")
             frame = self._uart.receive_frame()
             if frame is not None:
                 print("[MANAGER] _reader_loop received frame!")

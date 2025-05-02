@@ -1,7 +1,6 @@
 from enum import Enum
 import logging
 import random
-import time
 
 from prain_uart import *
 from brain.graph import Graph
@@ -29,7 +28,7 @@ class PathPlanner:
         self.current_orientation = 0
         self.node_orientation    = 0
         self.angles_from_camera  = []
-        self.angles = None
+        self.angles              = None
         self.current_angle_index = 0
         self.last_chosen_angle   = None
 
@@ -50,35 +49,35 @@ class PathPlanner:
         angles = sensor_data.get("camera-angles", [])
         if angles:
             self.angles = angles
-        print(f'angles detected: {angles}')
+
+        print(f'[PLANNER] immedate angles detected: {angles}')
         lidar  = sensor_data.get("lidar", (None, None, None))
         dist_cm, _, _ = lidar
 
-        print(f"DEBUG: next_action called with angles: {self.angles}, lidar: {lidar}")
-        print(f"{self.state}")
-
-        # angles = camera.get("angles", [])
+        print(f"[PLANNER] next_action called with persisted angles: {self.angles}, lidar: {lidar}")
+        print(f"[PLANNER] {self.state}")
 
         if self.state == NavState.BEGIN:
-            self.logger.debug("DEBUG: BEGIN state")
+            self.logger.debug("[PLANNER]: BEGIN state reached")
             self.state = NavState.TRAVELING_EDGE
             return encode_move(Address.MOTION_CTRL, 0), self.current_node
 
         # ---------------- TRAVELING_EDGE ----------------
         if self.state == NavState.TRAVELING_EDGE:
-            self.logger.debug(f"Traveling from {self.current_node}")
+            self.logger.debug(f"[PLANNER] Traveling from {self.current_node}")
 
             if self.angles:  # Angles present means we've arrived at a node
                 self.current_node = self._infer_next_node(self.current_node, self.last_chosen_angle)
                 self.state = NavState.ARRIVED_AT_NODE
-                self.logger.info(f"Arrived at node {self.current_node}")
+                self.logger.info(f"[PLANNER] Arrived at node {self.current_node}")
                 return encode_stop(Address.MOTION_CTRL), self.current_node
 
             return None, self.current_node
 
         # --------------- ARRIVED_AT_NODE ---------------
         elif self.state == NavState.ARRIVED_AT_NODE:
-            print(f"DEBUG: STATE ARRIVED_AT_NODE")
+            print(f"[PLANNER]: ARRIVED_AT_NODE state reached")
+
             """
             if self.current_node == self.target_node:
                 self.state = NavState.GOAL_REACHED
@@ -92,32 +91,34 @@ class PathPlanner:
             self.visited_nodes.add(self.current_node)
             self.state = NavState.DECIDING_NEXT_ANGLE
 
-            self.logger.info(f"Arrived at {self.current_node}, detected angles: {self.angles_from_camera}")
+            self.logger.info(f"[PLANNER] Arrived at {self.current_node}, detected angles: {self.angles_from_camera}")
             return None, self.current_node
 
         # ------------ DECIDING_NEXT_ANGLE --------------
         elif self.state == NavState.DECIDING_NEXT_ANGLE:
             if not self.angles_from_camera:
                 self.state = NavState.BLOCKED
-                self.logger.warning(f"No angles available at {self.current_node}, marking as blocked")
+                self.logger.warning(f"[PLANNER] No angles available at {self.current_node}, marking as blocked")
                 return encode_stop(Address.MOTION_CTRL), self.current_node
 
             if self.current_angle_index >= len(self.angles_from_camera):
                 self.state = NavState.BLOCKED
-                self.logger.warning(f"All angles tried at {self.current_node}, marking as blocked")
+                self.logger.warning(f"[PLANNER] All angles tried at {self.current_node}, marking as blocked")
                 return encode_stop(Address.MOTION_CTRL), self.current_node
 
             angle_choice = self._get_random_angle(self.angles)
             while 170 < angle_choice < 190:
                 angle_choice = self._get_random_angle(self.angles) # self.angles_from_camera[self.current_angle_index]
-            print(f'angle chosen: {angle_choice}')
+
+            print(f"[PLANNER] chosen angle: {angle_choice}")
+
             # turn_amount = angle_choice - self.node_orientation
             turn_amount = 360 - angle_choice if angle_choice > 180 else -angle_choice
             self.current_orientation = angle_choice
             self.last_chosen_angle = angle_choice
             self.state = NavState.CHECK_NEXT_ANGLE
 
-            self.logger.debug(f"Turning to angle {angle_choice} (turn amount: {turn_amount})")
+            self.logger.debug(f"[PLANNER] Turning to angle {angle_choice} (turn amount: {turn_amount})")
             turn_amount = turn_amount * 10
             return encode_turn(Address.MOTION_CTRL, turn_amount), self.current_node
 
@@ -138,17 +139,17 @@ class PathPlanner:
             """
             self.state = NavState.TRAVELING_EDGE
             self.angles = None
-            self.logger.info(f"Angle {self.last_chosen_angle} clear (dist: {dist_cm}cm), moving forward")
+            self.logger.info(f"[PLANNER] Angle {self.last_chosen_angle} clear (dist: {dist_cm}cm), moving forward")
             return encode_move(Address.MOTION_CTRL, 0), self.current_node
 
         # ---------------- GOAL_REACHED -----------------
         elif self.state == NavState.GOAL_REACHED:
-            self.logger.debug("Remaining stopped at goal")
+            self.logger.debug("[PLANNER] Remaining stopped at goal")
             return encode_stop(Address.MOTION_CTRL), self.current_node
 
         # ---------------- BLOCKED ----------------------
         elif self.state == NavState.BLOCKED:
-            self.logger.debug(f"Stopped at blocked node {self.current_node}")
+            self.logger.debug(f"[PLANNER] Stopped at blocked node {self.current_node}")
             return encode_stop(Address.MOTION_CTRL), self.current_node
 
         return None, self.current_node
