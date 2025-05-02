@@ -29,7 +29,7 @@ class VisionNavigator:
         self.__capture_thread = None
         self.__process_thread = None
         self.__stopped_event = threading.Event()
-        
+
     def __capture_and_write_loop(self):
         self.__capture_loop()
         self.__writer_loop()
@@ -40,7 +40,7 @@ class VisionNavigator:
 
         test_frame = self.__video_source.get_next_frame()
         if test_frame is None:
-            raise RuntimeError("Kein Frame erhalten – Kamera-Start prüfen")
+            raise RuntimeError("Kein Frame erhalten - Kamera-Start prüfen")
         frame_height, frame_width = test_frame.shape[:2]
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         self.__out = cv2.VideoWriter(self.__output_path, fourcc, self.__fps, (frame_width, frame_height))
@@ -121,7 +121,7 @@ class VisionNavigator:
                         self.__write_queue.put(processed_frame, timeout=0.1)
                     except Full:
                         self.__log.warning("Write-Queue voll – Frame verworfen.")
-                    
+
                     frame_count += 1
                     if frame_count % 50 == 0:
                         elapsed = time.time() - start_time
@@ -131,7 +131,7 @@ class VisionNavigator:
             except Exception as e:
                 self.__log.warning(f"Fehler in process_loop: {e}")
             finally:
-                self.__capture_queue.task_done()  # <-- nur sicher, weil `get()` erfolgreich war            
+                self.__capture_queue.task_done()  # <-- nur sicher, weil `get()` erfolgreich war
 
     def __writer_loop(self):
         while self.__running or not self.__write_queue.empty():
@@ -152,11 +152,11 @@ class VisionNavigator:
 
         if self.__debug: self.__write_queue.join()
         self.__capture_queue.join()
-        
+
         self.__capture_thread.join()
         self.__process_thread.join()
         if self.__debug: self.__writer_thread.join()
-        
+
         if self.__debug: self.cleanup()
         self.__stopped_event.set()
 
@@ -168,14 +168,14 @@ class VisionNavigator:
             self.__log.info("VideoWriter released")
 
         if self.__debug: self.reencode_video()
-        
+
     def get_data(self):
         try:
             data = self.__node_stack.pop()
         except IndexError:
             data = []
         return data
-    
+
     def is_running(self):
         return self.__running
 

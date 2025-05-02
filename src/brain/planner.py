@@ -78,6 +78,9 @@ class PathPlanner:
         elif self.state == NavState.ARRIVED_AT_NODE:
             print(f"[PLANNER]: ARRIVED_AT_NODE state reached")
 
+
+            # Check if the current node is the target node
+
             """
             if self.current_node == self.target_node:
                 self.state = NavState.GOAL_REACHED
