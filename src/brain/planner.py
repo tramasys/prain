@@ -12,6 +12,7 @@ class NavState(Enum):
     CHECK_NEXT_ANGLE    = 5
     GOAL_REACHED        = 6
     BLOCKED             = 7
+    BEGIN               = 8
 
 class PathPlanner:
     def __init__(self, graph: Graph, target_node: str, logger: logging.Logger):
@@ -20,7 +21,7 @@ class PathPlanner:
         self.target_node = target_node
         self.logger = logger
 
-        self.state = NavState.ARRIVED_AT_NODE
+        self.state = NavState.BEGIN
         self.logger.info(f"Initialized planner at node {self.current_node} with target {self.target_node}")
 
         self.visited_nodes       = set()
@@ -53,6 +54,11 @@ class PathPlanner:
 
         # angles = camera.get("angles", [])
 
+        if self.state == NavState.BEGIN:
+            self.logger.debug("DEBUG: BEGIN state")
+            #self.state = NavState.ARRIVED_AT_NODE
+            return encode_move(Address.MOTION_CTRL, 0), self.current_node
+
         # ---------------- TRAVELING_EDGE ----------------
         if self.state == NavState.TRAVELING_EDGE:
             self.logger.debug(f"Traveling from {self.current_node}")
@@ -67,6 +73,7 @@ class PathPlanner:
 
         # --------------- ARRIVED_AT_NODE ---------------
         elif self.state == NavState.ARRIVED_AT_NODE:
+            print(f"DEBUG: STATE ARRIVED_AT_NODE")
             if self.current_node == self.target_node:
                 self.state = NavState.GOAL_REACHED
                 self.logger.info("Goal reached!")
