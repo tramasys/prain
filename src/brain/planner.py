@@ -105,7 +105,7 @@ class PathPlanner:
                 self.logger.warning(f"All angles tried at {self.current_node}, marking as blocked")
                 return encode_stop(Address.MOTION_CTRL), self.current_node
 
-            angle_choice = self._get_random_angle(angles) # self.angles_from_camera[self.current_angle_index]
+            angle_choice = self._get_random_angle(self.angles) # self.angles_from_camera[self.current_angle_index]
             self.logger.debug(f'angle chosen: {angle_choice}')
             turn_amount = angle_choice - self.node_orientation
             self.current_orientation = angle_choice
