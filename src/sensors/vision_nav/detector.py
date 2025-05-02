@@ -1,12 +1,11 @@
 import cv2
 import numpy as np
-from cv2.typing import MatLike
 from sensors.vision_nav.edge import EdgeCandidate
 
 class Detector:
     frame_count_since_last_node = 0
 
-    def __init__(self, frame: MatLike, debug=False) -> None:
+    def __init__(self, frame, debug=False) -> None:
         self.__frame = frame
         self.debug = debug
 
@@ -176,7 +175,7 @@ class Detector:
 
         return averaged
     
-    def update_frame(self, frame: MatLike):
+    def update_frame(self, frame):
         self.__original_frame = frame
         self.__frame = frame.copy()
 
