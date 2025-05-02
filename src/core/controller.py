@@ -5,8 +5,8 @@ import logging
 
 from comms.manager import UartManager
 from sensors.camera import CameraSensor
-#from sensors.vision_nav.visionnavigator import VisionNavigator
-#from sensors.vision_nav.source import CameraSource
+from sensors.vision_nav.visionnavigator import VisionNavigator
+# from sensors.vision_nav.source import CameraSource
 from sensors.lidar import LidarSensor
 from brain.planner import PathPlanner
 from brain.graph import Graph
@@ -16,8 +16,8 @@ class HighLevelController:
     def __init__(self, uart_port: str, uart_baudrate: int, lidar_bus: int, lidar_address: int, target_node: str, logger: logging.Logger):
         self.uart_manager = UartManager(uart_port, uart_baudrate)
 
-        self.camera = CameraSensor(device_index=0)
-        # self.camera = VisionNavigator()
+        # self.camera = CameraSensor(device_index=0)
+        self.camera = VisionNavigator()
         self.lidar = LidarSensor(bus=lidar_bus, address=lidar_address)
 
         self.graph = Graph()
