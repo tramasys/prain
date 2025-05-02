@@ -57,6 +57,7 @@ class PathPlanner:
         print(f"[PLANNER] next_action called with persisted angles: {self.angles}, lidar: {lidar}")
         print(f"[PLANNER] {self.state}")
 
+        # ---------------- BEGIN ----------------
         if self.state == NavState.BEGIN:
             self.logger.debug("[PLANNER]: BEGIN state reached")
             self.state = NavState.TRAVELING_EDGE
