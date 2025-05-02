@@ -51,6 +51,7 @@ class PathPlanner:
         dist_cm, _, _ = lidar
 
         print(f"DEBUG: next_action called with angles: {angles}, lidar: {lidar}")
+        print(f"{self.state}")
 
         # angles = camera.get("angles", [])
 
