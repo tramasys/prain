@@ -69,7 +69,6 @@ class PathPlanner:
 
             if self.angles:  # Angles present means we've arrived at a node
                 self.current_node = self._infer_next_node(self.current_node, self.last_chosen_angle)
-                self.angles = None
                 self.state = NavState.ARRIVED_AT_NODE
                 self.logger.info(f"Arrived at node {self.current_node}")
                 return encode_stop(Address.MOTION_CTRL), self.current_node
@@ -128,6 +127,7 @@ class PathPlanner:
 
             else:
                 self.state = NavState.TRAVELING_EDGE
+                self.angles = None
                 self.logger.info(f"Angle {self.last_chosen_angle} clear (dist: {dist_cm}cm), moving forward")
                 return encode_move(Address.MOTION_CTRL, 0), self.current_node
 
