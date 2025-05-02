@@ -42,6 +42,7 @@ class UartManager:
                 frame = self.tx_queue.get(timeout=0.1)
                 self._uart.send_frame(frame)
                 print(f"DEBUG: _writer_loop sent frame 0x{frame.raw:016X}")
+                print(f"DEBUG: _writer_loop sent command {frame.cmd.name}")
             except Empty:
                 pass  # No frame in queue during this cycle
 
