@@ -48,6 +48,8 @@ class PathPlanner:
         lidar  = sensor_data.get("lidar", (None, None, None))
         dist_cm, _, _ = lidar
 
+        print(f"DEBUG: next_action called with angles: {angles}, lidar: {lidar}")
+
         # angles = camera.get("angles", [])
 
         # ---------------- TRAVELING_EDGE ----------------
