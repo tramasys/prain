@@ -24,6 +24,7 @@ class VisionNavigator:
         self.__capture_queue = Queue(maxsize=20)
         self.__write_queue = Queue(maxsize=20)
         self.__node_stack = []
+        self.__latest_main = None
 
         self.__writer_thread = None
         self.__capture_thread = None
@@ -78,6 +79,8 @@ class VisionNavigator:
                 # self.__running = False
                 threading.Thread(target=self.stop, daemon=True).start()
                 break
+
+            self.__latest_main = frame_main
 
             try:
                 self.__capture_queue.put((frame_lores, frame_main), timeout=0.01)
@@ -219,3 +222,5 @@ class VisionNavigator:
         input()
         self.stop()
 
+    def get_latest_main_frame(self) -> np.ndarray | None:
+        return self.__latest_main

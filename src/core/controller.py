@@ -4,7 +4,6 @@ import time
 import logging
 
 from comms.manager import UartManager
-from sensors.camera import CameraSensor
 from sensors.vision_nav.visionnavigator import VisionNavigator
 # from sensors.vision_nav.source import CameraSource
 from sensors.lidar import LidarSensor
@@ -16,12 +15,17 @@ class HighLevelController:
     def __init__(self, uart_port: str, uart_baudrate: int, lidar_bus: int, lidar_address: int, target_node: str, logger: logging.Logger):
         self.uart_manager = UartManager(uart_port, uart_baudrate)
 
-        # self.camera = CameraSensor(device_index=0)
         self.camera = VisionNavigator()
         self.lidar = LidarSensor(bus=lidar_bus, address=lidar_address)
 
         self.graph = Graph()
-        self.planner = PathPlanner(graph=self.graph, target_node=target_node, logger=logger)
+        self.planner = PathPlanner(
+            graph=self.graph,
+            target_node=target_node,
+            logger=logger,
+            frame_provider=self.camera.get_latest_main_frame
+        )
+
         self.logger = logger
 
         self.keep_running = True
@@ -61,7 +65,7 @@ class HighLevelController:
                 self.uart_manager.send_frame(command)
 
                 decoder = Decoder(command)
-                if decoder.command.name == 'TURN':
+                if decoder.command.name == "TURN":
                     time.sleep(1)
 
             time.sleep(0.05)

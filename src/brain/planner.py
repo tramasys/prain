@@ -1,9 +1,12 @@
 from enum import Enum
 import logging
 import random
+import numpy as np
+from collections import defaultdict
 
 from prain_uart import *
 from brain.graph import Graph
+from sensors.vision_nav.letter_ocr import detect_letter
 
 class NavState(Enum):
     TRAVELING_EDGE      = 1
@@ -15,7 +18,14 @@ class NavState(Enum):
     BEGIN               = 8
 
 class PathPlanner:
-    def __init__(self, graph: Graph, target_node: str, logger: logging.Logger):
+    def __init__(
+        self,
+        graph: Graph,
+        target_node: str,
+        logger: logging.Logger,
+        frame_provider: callable[[], np.ndarray | None] | None = None,
+    ):
+
         self.graph = graph
         self.current_node = "S"
         self.target_node = target_node
@@ -31,6 +41,8 @@ class PathPlanner:
         self.angles              = None
         self.current_angle_index = 0
         self.last_chosen_angle   = None
+
+        self._frame_provider = frame_provider
 
         # Scoring constants
         self.SECTION_BOOST = 3
@@ -80,13 +92,14 @@ class PathPlanner:
             print(f"[PLANNER]: ARRIVED_AT_NODE state reached")
 
             # Check if the current node is the target node
-
-            """
-            if self.current_node == self.target_node:
-                self.state = NavState.GOAL_REACHED
-                self.logger.info("Goal reached!")
-                return encode_stop(Address.MOTION_CTRL), self.current_node
-            """
+            if self._frame_provider:
+                frame = self._frame_provider()
+                if frame is not None:
+                    letter, rotation = detect_letter(frame)
+                    if letter and letter == self.target_node:
+                        self.state = NavState.GOAL_REACHED
+                        self.logger.info(f"[PLANNER] Goal reached at node {self.current_node} with letter {letter}")
+                        return encode_stop(Address.MOTION_CTRL), self.current_node
 
             self.angles_from_camera = self._sort_angles_by_pathfinding(self.angles)
             self.current_angle_index = 0
