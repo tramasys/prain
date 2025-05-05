@@ -13,14 +13,14 @@ from core.controller import HighLevelController
 
 def main_loop(args) -> None:
     logger = setup_logging()
-    logger.info("STARTING main control loop")
+    logger.info("[MAIN] starting main control loop")
 
     controller = HighLevelController(
         uart_port=args.uart,
         uart_baudrate=args.uart_baudrate,
         lidar_bus=args.lidar,
         lidar_address=args.lidar_address,
-        target_node="A",
+        target_node=args.target,
         logger=logger,
     )
 
@@ -28,10 +28,9 @@ def main_loop(args) -> None:
 
     try:
         while True:
-            #logger.info("Keeping main loop iteration alive ...")
             time.sleep(0.1)
     except KeyboardInterrupt:
-        logger.info("SHUTTING DOWN")
+        logger.info("[MAIN] shutting down main control loop")
     finally:
         controller.stop()
 
