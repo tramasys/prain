@@ -98,7 +98,7 @@ class PathPlanner:
                     letter, rotation = detect_letter(frame)
                     if letter and letter == self.target_node:
                         self.state = NavState.GOAL_REACHED
-                        self.logger.info(f"[PLANNER] Goal reached at node {self.current_node} with letter {letter}")
+                        self.logger.info(f"[PLANNER] Goal reached with letter {letter}")
                         return encode_stop(Address.MOTION_CTRL), self.current_node
 
             self.angles_from_camera = self._sort_angles_by_pathfinding(self.angles)
