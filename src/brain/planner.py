@@ -2,7 +2,6 @@ from enum import Enum
 import logging
 import random
 import numpy as np
-from collections import defaultdict
 
 from prain_uart import *
 from brain.graph import Graph
@@ -89,7 +88,7 @@ class PathPlanner:
 
         # --------------- ARRIVED_AT_NODE ---------------
         elif self.state == NavState.ARRIVED_AT_NODE:
-            print(f"[PLANNER]: ARRIVED_AT_NODE state reached")
+            print(f"[PLANNER] ARRIVED_AT_NODE state reached")
 
             # Check if the current node is the target node
             if self._frame_provider:
