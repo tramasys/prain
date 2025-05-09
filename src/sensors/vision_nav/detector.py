@@ -176,7 +176,6 @@ class Detector:
         return averaged
     
     def update_frame(self, frame):
-        self.__original_frame = frame
         self.__frame = frame.copy()
 
     @staticmethod
