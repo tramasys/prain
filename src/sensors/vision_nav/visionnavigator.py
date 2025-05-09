@@ -13,7 +13,7 @@ from sensors.vision_nav.source import VideoSource, CameraSource, FileSource
 from sensors.vision_nav.node import Node
 
 class VisionNavigator:
-    def __init__(self, video_source: VideoSource = CameraSource(), output_path='output.mp4', debug=False):
+    def __init__(self, video_source: VideoSource = CameraSource(), output_path='output.mp4', debug=False, goal_node='A'):
         self.__running = False
         self.__video_source = video_source
         self.__output_path = output_path
@@ -24,6 +24,8 @@ class VisionNavigator:
         self.__capture_queue = Queue(maxsize=20)
         self.__write_queue = Queue(maxsize=20)
         self.__node_stack = []
+        self.__goal_node = goal_node
+        self.__goal_node_detected = False
         self.__latest_main = None
 
         self.__writer_thread = None
@@ -93,7 +95,7 @@ class VisionNavigator:
                     self.__log.warning("Unerwartet: Queue war doch leer.")
 
     def __process_loop(self):
-        detector = Detector(np.zeros((640, 640, 3), dtype=np.uint8))
+        detector = Detector(np.zeros((640, 640, 3), dtype=np.uint8), goal_node=self.__goal_node)
         node = Node()
         frame_count = 0
         start_time = time.time()
@@ -178,6 +180,9 @@ class VisionNavigator:
         except IndexError:
             data = []
         return data
+    
+    def get_goal_node_detected(self) -> bool:
+        return self.__goal_node_detected
 
     def is_running(self):
         return self.__running
