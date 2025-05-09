@@ -22,7 +22,6 @@ class PathPlanner:
         graph: Graph,
         target_node: str,
         logger: logging.Logger,
-        frame_provider: callable[[], np.ndarray | None] | None = None,
     ):
 
         self.graph = graph
@@ -40,8 +39,6 @@ class PathPlanner:
         self.angles              = None
         self.current_angle_index = 0
         self.last_chosen_angle   = None
-
-        self._frame_provider = frame_provider
 
         # Scoring constants
         self.SECTION_BOOST = 3
@@ -64,6 +61,8 @@ class PathPlanner:
         print(f'[PLANNER] immedate angles detected: {angles}')
         lidar  = sensor_data.get("lidar", (None, None, None))
         dist_cm, _, _ = lidar
+        
+        goal_node_reached = sensor_data.get("goal-node-reached", None)
 
         print(f"[PLANNER] next_action called with persisted angles: {self.angles}, lidar: {lidar}")
         print(f"[PLANNER] {self.state}")
@@ -90,15 +89,20 @@ class PathPlanner:
         elif self.state == NavState.ARRIVED_AT_NODE:
             print(f"[PLANNER] ARRIVED_AT_NODE state reached")
 
+            # if self._frame_provider:
+            #     frame = self._frame_provider()
+            #     if frame is not None:
+            #         letter, rotation = detect_letter(frame)
+            #         if letter and letter == self.target_node:
+            #             self.state = NavState.GOAL_REACHED
+            #             self.logger.info(f"[PLANNER] Goal reached with letter {letter}")
+            #             return encode_stop(Address.MOTION_CTRL), self.current_node
+            
             # Check if the current node is the target node
-            if self._frame_provider:
-                frame = self._frame_provider()
-                if frame is not None:
-                    letter, rotation = detect_letter(frame)
-                    if letter and letter == self.target_node:
-                        self.state = NavState.GOAL_REACHED
-                        self.logger.info(f"[PLANNER] Goal reached with letter {letter}")
-                        return encode_stop(Address.MOTION_CTRL), self.current_node
+            if goal_node_reached:
+                self.state = NavState.GOAL_REACHED
+                self.logger.info(f"[PLANNER] Goal reached")
+                return encode_stop(Address.MOTION_CTRL), self.current_node
 
             self.angles_from_camera = self._sort_angles_by_pathfinding(self.angles)
             self.current_angle_index = 0

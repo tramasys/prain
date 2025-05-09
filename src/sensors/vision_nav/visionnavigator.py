@@ -11,6 +11,7 @@ from queue import Queue, Empty, Full
 from sensors.vision_nav.detector import Detector
 from sensors.vision_nav.source import VideoSource, CameraSource, FileSource
 from sensors.vision_nav.node import Node
+from sensors.vision_nav.letter_ocr import detect_letter
 
 class VisionNavigator:
     def __init__(self, video_source: VideoSource = CameraSource(), output_path='output.mp4', debug=False, goal_node='A'):
@@ -95,10 +96,11 @@ class VisionNavigator:
                     self.__log.warning("Unerwartet: Queue war doch leer.")
 
     def __process_loop(self):
-        detector = Detector(np.zeros((640, 640, 3), dtype=np.uint8), goal_node=self.__goal_node)
+        detector = Detector(np.zeros((640, 640, 3), dtype=np.uint8))
         node = Node()
         frame_count = 0
         start_time = time.time()
+        image_for_goal_node_detection = None
 
         while self.__running or not self.__capture_queue.empty():
             try:
@@ -111,6 +113,11 @@ class VisionNavigator:
 
                 detector.update_frame(frame_lores)
                 processed_frame, edges = detector.get_edges()
+                if not image_for_goal_node_detection and edges:
+                    image_for_goal_node_detection = processed_frame
+                    letter, _ = detect_letter(image_for_goal_node_detection)
+                    if letter and letter == self.__goal_node:
+                        self.__set_goal_node_detected()
 
                 if edges:
                     node.extend_edge_candidates(edges)
@@ -120,6 +127,7 @@ class VisionNavigator:
                     self.__log.info(f'Node: {edge_angles}')
                     self.__node_stack.append(edge_angles)
                     node = Node()
+                    image_for_goal_node_detection = None
 
                 if self.__debug:
                     try:
@@ -181,7 +189,7 @@ class VisionNavigator:
             data = []
         return data
     
-    def get_goal_node_detected(self) -> bool:
+    def get_goal_node_reached(self) -> bool:
         return self.__goal_node_detected
 
     def is_running(self):
@@ -226,6 +234,6 @@ class VisionNavigator:
         self.__log.info("Press ENTER to stop recording...")
         input()
         self.stop()
-
-    def get_latest_main_frame(self) -> np.ndarray | None:
-        return self.__latest_main
+    
+    def __set_goal_node_detected(self):
+        self.__goal_node_detected = True

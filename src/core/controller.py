@@ -22,8 +22,7 @@ class HighLevelController:
         self.planner = PathPlanner(
             graph=self.graph,
             target_node=target_node,
-            logger=logger,
-            frame_provider=self.camera.get_latest_main_frame
+            logger=logger
         )
 
         self.logger = logger
@@ -43,6 +42,7 @@ class HighLevelController:
         while self.keep_running:
             sensor_data = {
                 "camera-angles": self.camera.get_data(),
+                "goal-node-reached": self.camera.get_goal_node_reached(),
                 "lidar": self.lidar.get_data(),
             }
 

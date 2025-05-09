@@ -1,25 +1,19 @@
 import cv2
 import numpy as np
 from sensors.vision_nav.edge import EdgeCandidate
-from sensors.vision_nav.letter_ocr import detect_letter
 
 class Detector:
     frame_count_since_last_node = 0
 
-    def __init__(self, frame, debug=False, goal_node='A') -> None:
+    def __init__(self, frame, debug=False) -> None:
         self.__frame = frame
         self.debug = debug
-        self.__goal_node = goal_node
 
     def get_edges(self):
         self.__frame = cv2.cvtColor(self.__frame, cv2.COLOR_BGR2HSV)
         self.__frame, node_detected = self.__detect_node()
         
         if node_detected:
-            letter, _ = detect_letter(self.__frame)
-            if letter and letter == self.__goal_node:
-                # Do something like: notify_goal_reached()
-                pass
             Detector.frame_count_since_last_node = 0
         else:
             Detector.frame_count_since_last_node += 1
