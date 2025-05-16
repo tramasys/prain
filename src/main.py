@@ -72,6 +72,7 @@ def main():
 
     def run_sweeptest():
         manager = UartManager(args.uart, args.uart_baudrate)
+        manager.start()
         test_sweep(manager)
         manager.stop()
 
