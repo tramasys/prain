@@ -11,6 +11,7 @@ from sub.switchtest import target_switch_test
 from sub.soundtest import test_sound
 from sub.gotest import test_go_button
 from sub.lamptest import test_lamp
+from sub.sweeptest import test_sweep
 from cli import parse_args
 from comms.uart import UartInterface
 from core.controller import HighLevelController
@@ -68,10 +69,16 @@ def main():
         send_test(uart)
         uart.close()
 
+    def run_sweeptest():
+        uart = UartInterface(args.uart, args.uart_baudrate)
+        test_sweep(uart)
+        uart.close()
+
     subprogram_handlers = {
         "dtest":        run_dtest,
         "etest":        run_etest,
         "stest":        run_stest,
+        "sweeptest":    run_sweeptest,
         "lamptest":     lambda: test_lamp(),
         "gotest":       lambda: test_go_button(),
         "soundtest":    lambda: test_sound(),
