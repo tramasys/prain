@@ -1,50 +1,39 @@
-# go_button.py – revised
-import time
-import RPi.GPIO as GPIO
-from typing import Final, Optional
-
+from gpiozero import Button
+from typing import Optional, Final
 
 class GoButton:
-    """Blocking interface for the push-button on BCM GPIO 16."""
+    """Start-driving button on BCM 16, active-low with internal pull-up."""
 
     _PIN: Final[int] = 16
-    _PUD: Final[int] = GPIO.PUD_UP
 
-    def __init__(self, bounce_ms: int = 50) -> None:
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup(self._PIN, GPIO.IN, pull_up_down=self._PUD)
-        self._bounce = bounce_ms
+    def __init__(self, bounce_s: float = 0.05) -> None:
+        # gpiozero handles pull-ups/downs and debouncing internally
+        self._btn = Button(self._PIN, pull_up=True, bounce_time=bounce_s)
 
+    # --------------------------------------------------------------------- API
     def wait_for_press(self, timeout: Optional[float] = None) -> None:
         """
-        Block until button pressed (falling edge).
-        `timeout` in seconds; --> raises TimeoutError if expired.
-        """
-        timeout_ms = None if timeout is None else int(timeout * 1000)
+        Block until the button is pressed.
 
-        try:
-            ch = GPIO.wait_for_edge(
-                self._PIN,
-                GPIO.FALLING,
-                bouncetime=self._bounce,
-                timeout=timeout_ms,
-            )
-            if ch is None and timeout is not None:
-                raise TimeoutError("GO button timeout")
-        except RuntimeError:
-            # occasional RPi.GPIO bug – fall back to polling
-            start = time.monotonic()
-            while GPIO.input(self._PIN):
-                if timeout is not None and time.monotonic() - start >= timeout:
-                    raise TimeoutError("GO button timeout (polling fallback)")
-                time.sleep(0.005)
+        Parameters
+        ----------
+        timeout : float | None
+            Seconds to wait; None → wait indefinitely.
+        Raises
+        ------
+        TimeoutError
+            If `timeout` elapses with no button press.
+        """
+        if not self._btn.wait_for_press(timeout):
+            raise TimeoutError("GO button timeout")
 
     def is_pressed(self) -> bool:
-        """Return current button state (active-low)."""
-        return not GPIO.input(self._PIN)
+        """Return True while the button is physically held down."""
+        return self._btn.is_pressed
 
+    # ---------------------------------------------------------------- cleanup
     def close(self) -> None:
-        GPIO.cleanup(self._PIN)
+        self._btn.close()
 
     # context-manager support
     def __enter__(self):
