@@ -7,6 +7,7 @@ from sub.ldtest import lidar_test
 from sub.rc import rc_server
 from sub.rcclient import rc_client
 from sub.stest import send_test
+from sub.switchtest import target_switch_test
 from cli import parse_args
 from comms.uart import UartInterface
 from core.controller import HighLevelController
@@ -56,6 +57,7 @@ def main():
         "dtest":    run_dtest,
         "etest":    run_etest,
         "stest":    run_stest,
+        "switchtest": lambda: target_switch_test(),
         "rcserver": lambda: rc_server(args.uart, args.uart_baudrate, args.host, args.port),
         "rcclient": lambda: rc_client(args.host, args.port),
         "ldtest":   lambda: lidar_test(args.lidar, args.lidar_address),
