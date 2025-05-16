@@ -5,4 +5,3 @@ def test_go_button():
     print("Press the button to test...")
     go_button.wait_for_press()
     print("Button pressed!")
-    go_button.cleanup()
