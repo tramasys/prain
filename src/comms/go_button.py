@@ -1,45 +1,50 @@
-# utils/go_button.py
+# utils/go_button.py  (replace previous version)
 import time
 import RPi.GPIO as GPIO
 
 
 class GoButton:
-    """GO push-button on header-pin 16 (BCM 23)."""
+    """
+    Blocking / non-blocking access to the “GO” push-button on pin 16.
 
-    def __init__(
-        self,
-        pin: int = 23,               # BCM 23  ⇔  physical pin 16
-        *,
-        numbering: int = GPIO.BCM,
-        pull: int = GPIO.PUD_DOWN,   # change to PUD_UP if your wiring is active-low
-    ):
+    Parameters
+    ----------
+    pin : int
+        BCM pin number (physical hdr-pin 16 == BCM 23).
+    active_high : bool, default True
+        • True  → button connects pin to 3V3 → logic HIGH when pressed
+        • False → button connects pin to GND → logic LOW  when pressed
+          (typical wiring with internal pull-up).
+    """
+
+    def __init__(self, pin: int = 23, *, active_high: bool = True) -> None:
         GPIO.setwarnings(False)
-        GPIO.setmode(numbering)
-        self._pin = pin
+        GPIO.setmode(GPIO.BCM)
+
+        self._pin         = pin
+        self._active_high = active_high
+        pull = GPIO.PUD_DOWN if active_high else GPIO.PUD_UP
+
         GPIO.setup(pin, GPIO.IN, pull_up_down=pull)
 
-    # ────────────────────────────────────────────────────────────────
-    def is_pressed(self) -> bool:          # non-blocking
-        return GPIO.input(self._pin) == GPIO.HIGH
+    # ─────────────────────────────────────────────────────────────
+    def is_pressed(self) -> bool:     # non-blocking
+        return GPIO.input(self._pin) == (GPIO.HIGH if self._active_high else GPIO.LOW)
 
     def wait_for_press(
         self,
         *,
-        debounce: float = 0.05,            # seconds
-        poll: float = 0.01,                # polling interval if fallback is used
-    ) -> None:
-        """
-        Block until a rising edge is detected.
-        Falls back to polling if edge-detection fails.
-        """
+        debounce: float = 0.05,
+        poll: float = 0.01,
+    ) -> None:                        # blocking
+        edge = GPIO.RISING if self._active_high else GPIO.FALLING
         try:
-            GPIO.wait_for_edge(self._pin, GPIO.RISING)
-            time.sleep(debounce)           # debounce
-        except RuntimeError:
+            GPIO.wait_for_edge(self._pin, edge)
+        except RuntimeError:          # fall back to polling
             while not self.is_pressed():
                 time.sleep(poll)
-            time.sleep(debounce)
+        time.sleep(debounce)          # debounce
 
-    # ────────────────────────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────
     def cleanup(self) -> None:
         GPIO.cleanup(self._pin)
