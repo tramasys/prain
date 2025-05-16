@@ -16,9 +16,11 @@ class PWMBuzzer:
         """Play *tones* = [(f1, t1), …] using specified duty-cycle %."""
         if not tones:
             return
+
         if not self._started:
             self._pwm.start(duty)
             self._started = True
+
         for freq, dur in tones:
             self._pwm.ChangeDutyCycle(duty)
             self._pwm.ChangeFrequency(freq)
