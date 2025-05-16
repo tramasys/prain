@@ -1,9 +1,10 @@
 import time
 from comms.uart import UartInterface
+from comms.manager import UartManager
 from prain_uart import *
 
-def test_sweep(uart_interface: UartInterface) -> None:
-    print(f"Starting sweep test on {uart_interface.port} at {uart_interface.baudrate} baud")
+def test_sweep(uart_manager: UartManager) -> None:
+    print(f"Starting sweep test on {uart_manager.port} at {uart_manager.baudrate} baud")
 
     test_frames = [
         encode_turn(Address.MOTION_CTRL, -100),
@@ -14,10 +15,10 @@ def test_sweep(uart_interface: UartInterface) -> None:
     try:
         for frame in test_frames:
             print(f"Sending frame: {frame.raw:016x}")
-            uart_interface.send_frame(frame)
+            uart_manager.send_frame(frame)
             time.sleep(1)
 
     except KeyboardInterrupt:
         print("\nStopping encode test")
     finally:
-        uart_interface.close()
+        uart_manager.stop()

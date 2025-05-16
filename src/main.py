@@ -14,6 +14,7 @@ from sub.lamptest import test_lamp
 from sub.sweeptest import test_sweep
 from cli import parse_args
 from comms.uart import UartInterface
+from comms.manager import UartManager
 from core.controller import HighLevelController
 from comms.target import TargetDetector
 from comms.go_button import GoButton
@@ -70,9 +71,9 @@ def main():
         uart.close()
 
     def run_sweeptest():
-        uart = UartInterface(args.uart, args.uart_baudrate)
-        test_sweep(uart)
-        uart.close()
+        manager = UartManager(args.uart, args.uart_baudrate)
+        test_sweep(manager)
+        manager.stop()
 
     subprogram_handlers = {
         "dtest":        run_dtest,
