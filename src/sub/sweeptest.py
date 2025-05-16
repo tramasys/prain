@@ -4,7 +4,7 @@ from comms.manager import UartManager
 from prain_uart import *
 
 def test_sweep(uart_manager: UartManager) -> None:
-    print(f"Starting sweep test on {uart_manager.port} at {uart_manager.baudrate} baud")
+    print(f"Starting sweep test!")
 
     test_frames = [
         encode_turn(Address.MOTION_CTRL, -100),
