@@ -22,11 +22,11 @@ def main_loop(args) -> None:
 
     detector = TargetDetector()
     target   = detector.detect()
-    print(f"[MAIN] Target: {target}")
+    logger.info(f"[MAIN] Target: {target}")
     detector.cleanup()
 
     go_btn = GoButton()
-    logger.info("[MAIN] waiting for GO button …")
+    logger.info("[MAIN] waiting for GO button ...")
     go_btn.wait_for_press()
     logger.info("[MAIN] GO button pressed - starting vehicle")
 
