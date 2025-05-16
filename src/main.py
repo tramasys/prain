@@ -10,6 +10,7 @@ from sub.stest import send_test
 from sub.switchtest import target_switch_test
 from sub.soundtest import test_sound
 from sub.gotest import test_go_button
+from sub.lamptest import test_lamp
 from cli import parse_args
 from comms.uart import UartInterface
 from core.controller import HighLevelController
@@ -71,6 +72,7 @@ def main():
         "dtest":        run_dtest,
         "etest":        run_etest,
         "stest":        run_stest,
+        "lamptest":     lambda: test_lamp(),
         "gotest":       lambda: test_go_button(),
         "soundtest":    lambda: test_sound(),
         "switchtest":   lambda: target_switch_test(),
