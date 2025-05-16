@@ -1,13 +1,3 @@
-"""
-Unified import for RPi-GPIO code.
-
-    from gpio_compat import GPIO
-
-• On a Raspberry Pi -→ real RPi.GPIO module.
-• Anywhere else     -→ silent stub with the same public symbols.
-
-If you **really** want the stub on a Pi (e.g. CI), export DUMMY_GPIO=1.
-"""
 from types import SimpleNamespace
 import importlib
 import os
@@ -15,11 +5,10 @@ import platform
 import sys
 
 def _running_on_rpi() -> bool:
-    if os.getenv("DUMMY_GPIO") == "1":         # manual override
+    if os.getenv("DUMMY_GPIO") == "1":
         return False
     if sys.platform != "linux":
         return False
-    # Heuristic: ARM/ARM64 + devicetree "model" node is enough
     try:
         return platform.machine().startswith(("arm", "aarch")) and \
                os.path.exists("/sys/firmware/devicetree/base/model")
@@ -27,10 +16,8 @@ def _running_on_rpi() -> bool:
         return False
 
 if _running_on_rpi():
-    # → *real* driver
-    GPIO = importlib.import_module("RPi.GPIO")        # type: ignore
+    GPIO = importlib.import_module("RPi.GPIO")
 else:
-    # → minimal, side-effect-free stub
     def _noop(*_, **__): ...
     class _FakePWM:
         def __init__(self, pin, freq): self.freq = freq

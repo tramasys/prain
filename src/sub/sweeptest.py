@@ -6,9 +6,9 @@ def test_sweep(uart_interface: UartInterface) -> None:
     print(f"Starting sweep test on {uart_interface.port} at {uart_interface.baudrate} baud")
 
     test_frames = [
-        encode_turn(Address.MOTION_CTRL, -50),
-        encode_turn(Address.MOTION_CTRL, 100),
-        encode_turn(Address.MOTION_CTRL, -50),
+        encode_turn(Address.MOTION_CTRL, -100),
+        encode_turn(Address.MOTION_CTRL, 200),
+        encode_turn(Address.MOTION_CTRL, -100),
     ]
 
     try:
