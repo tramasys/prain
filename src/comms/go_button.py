@@ -4,13 +4,12 @@ from typing import Optional, Final
 class GoButton:
     """Start-driving button on BCM 16, active-low with internal pull-up."""
 
-    _PIN: Final[int] = 23
+    _PIN: Final[int] = 16
 
     def __init__(self, bounce_s: float = 0.05) -> None:
         # gpiozero handles pull-ups/downs and debouncing internally
         self._btn = Button(self._PIN, pull_up=True, bounce_time=bounce_s)
 
-    # --------------------------------------------------------------------- API
     def wait_for_press(self, timeout: Optional[float] = None) -> None:
         """
         Block until the button is pressed.
