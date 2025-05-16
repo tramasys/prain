@@ -4,7 +4,7 @@ from typing import Optional, Final
 class GoButton:
     """Start-driving button on BCM 16, active-low with internal pull-up."""
 
-    _PIN: Final[int] = 16
+    _PIN: Final[int] = 23
 
     def __init__(self, bounce_s: float = 0.05) -> None:
         # gpiozero handles pull-ups/downs and debouncing internally
