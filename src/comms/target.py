@@ -1,10 +1,7 @@
-# utils/target_detector.py
 import RPi.GPIO as GPIO
-
 
 class TargetDetector:
     """
-    Encoding (active-high, BCM numbering by default):
         ┌─────────┬──────────┬──────────┐
         │ target  │ pin11     │ pin25    │
         ├─────────┼──────────┼──────────┤
@@ -15,9 +12,9 @@ class TargetDetector:
     """
 
     _MAP = {
-        (1, 0): "a",
-        (1, 1): "b",
-        (0, 1): "c",
+        (1, 0): "A",
+        (1, 1): "B",
+        (0, 1): "C",
     }
 
     def __init__(

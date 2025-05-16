@@ -8,20 +8,34 @@ from sub.rc import rc_server
 from sub.rcclient import rc_client
 from sub.stest import send_test
 from sub.switchtest import target_switch_test
+from sub.soundtest import sound_test
+from sub.gotest import test_go_button
 from cli import parse_args
 from comms.uart import UartInterface
 from core.controller import HighLevelController
+from comms.target import TargetDetector
+from comms.go_button import GoButton
 
 def main_loop(args) -> None:
     logger = setup_logging()
     logger.info("[MAIN] starting main control loop")
+
+    detector = TargetDetector()
+    target   = detector.detect()
+    print(f"[MAIN] Target: {target}")
+    detector.cleanup()
+
+    go_btn = GoButton()
+    logger.info("[MAIN] waiting for GO button …")
+    go_btn.wait_for_press()
+    logger.info("[MAIN] GO button pressed - starting vehicle")
 
     controller = HighLevelController(
         uart_port=args.uart,
         uart_baudrate=args.uart_baudrate,
         lidar_bus=args.lidar,
         lidar_address=args.lidar_address,
-        target_node=args.target,
+        target_node=target,
         logger=logger,
     )
 
@@ -54,14 +68,16 @@ def main():
         uart.close()
 
     subprogram_handlers = {
-        "dtest":    run_dtest,
-        "etest":    run_etest,
-        "stest":    run_stest,
-        "switchtest": lambda: target_switch_test(),
-        "rcserver": lambda: rc_server(args.uart, args.uart_baudrate, args.host, args.port),
-        "rcclient": lambda: rc_client(args.host, args.port),
-        "ldtest":   lambda: lidar_test(args.lidar, args.lidar_address),
-        None:       lambda: main_loop(args),
+        "dtest":        run_dtest,
+        "etest":        run_etest,
+        "stest":        run_stest,
+        "gotest":       lambda: test_go_button(),
+        "soundtest":    lambda: sound_test(),
+        "switchtest":   lambda: target_switch_test(),
+        "rcserver":     lambda: rc_server(args.uart, args.uart_baudrate, args.host, args.port),
+        "rcclient":     lambda: rc_client(args.host, args.port),
+        "ldtest":       lambda: lidar_test(args.lidar, args.lidar_address),
+        None:           lambda: main_loop(args),
     }
 
     handler = subprogram_handlers.get(args.subprogram, subprogram_handlers[None])
