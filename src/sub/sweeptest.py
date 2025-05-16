@@ -2,7 +2,7 @@ import time
 from comms.uart import UartInterface
 from prain_uart import *
 
-def encode_test(uart_interface: UartInterface) -> None:
+def test_sweep(uart_interface: UartInterface) -> None:
     print(f"Starting sweep test on {uart_interface.port} at {uart_interface.baudrate} baud")
 
     test_frames = [
