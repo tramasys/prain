@@ -27,7 +27,7 @@ def main_loop(args) -> None:
 
     go_btn = GoButton()
     logger.info("[MAIN] waiting for GO button ...")
-    go_btn.wait_for_press()
+    go_btn.wait_for_press() # blocks execution until the button is pressed
     logger.info("[MAIN] GO button pressed - starting vehicle")
 
     controller = HighLevelController(
