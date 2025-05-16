@@ -7,7 +7,7 @@ class GoButton:
     _PIN: Final[int] = 16
 
     def __init__(self, bounce_s: float = 0.05) -> None:
-        self._btn = Button(self._PIN, pull_up=None, bounce_time=None)
+        self._btn = Button(self._PIN, pull_up=None, bounce_time=None, active_state=False)
 
     def wait_for_press(self, timeout: Optional[float] = None) -> None:
         """
