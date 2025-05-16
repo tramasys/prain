@@ -27,9 +27,7 @@ class PWMBuzzer:
         self._pwm.ChangeDutyCycle(0)
 
     def play_goal(self) -> None:
-        self.play(
-            [(300, 0.15), (350, 0.15), (400, 0.15)]
-        )
+        self.play([(4000, 0.3)])
 
     def stop(self) -> None:
         self._pwm.stop()
