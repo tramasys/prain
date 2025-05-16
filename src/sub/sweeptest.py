@@ -18,6 +18,8 @@ def test_sweep(uart_manager: UartManager) -> None:
             uart_manager.send_frame(frame)
             #time.sleep(1)
 
+        time.sleep(3)
+
     except KeyboardInterrupt:
         print("\nStopping encode test")
     finally:

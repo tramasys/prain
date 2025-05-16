@@ -41,8 +41,8 @@ class PWMBuzzer:
             time.sleep(.05)
 
     def play_meow(self, total: float = 0.6) -> None:
-        step = 0.02                      # seconds between freq updates
-        half = int(total / (2 * step))   # number of steps per segment
+        step = 0.02
+        half = int(total / (2 * step))
         self._pwm.start(self._duty)
 
         # downward glide: 950 Hz → 450 Hz
