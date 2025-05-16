@@ -40,6 +40,25 @@ class PWMBuzzer:
             self._pwm.stop()
             time.sleep(.05)
 
+    def play_meow(self, total: float = 0.6) -> None:
+        step = 0.02                      # seconds between freq updates
+        half = int(total / (2 * step))   # number of steps per segment
+        self._pwm.start(self._duty)
+
+        # downward glide: 950 Hz → 450 Hz
+        for i in range(half):
+            f = 950 - (500 * i / half)
+            self._pwm.ChangeFrequency(f)
+            time.sleep(step)
+
+        # upward inflection: 450 Hz → 700 Hz
+        for i in range(half):
+            f = 450 + (250 * i / half)
+            self._pwm.ChangeFrequency(f)
+            time.sleep(step)
+
+        self._pwm.stop()
+
     def stop(self) -> None:
         self._pwm.stop()
         GPIO.cleanup(self._pin)
