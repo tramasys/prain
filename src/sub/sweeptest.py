@@ -15,7 +15,7 @@ def test_sweep(uart_interface: UartInterface) -> None:
         for frame in test_frames:
             print(f"\nSending frame: {frame.raw:016x}")
             uart_interface.send_frame(frame)
-            time.sleep(0.01)
+            time.sleep(0.3)
 
         print("Encode test complete")
     except KeyboardInterrupt:
