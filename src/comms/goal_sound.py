@@ -1,36 +1,29 @@
-import time
-from typing import Sequence, Tuple
 import RPi.GPIO as GPIO
+import time
 
 class PWMBuzzer:
-    def __init__(self, pin: int = 18, *, numbering: int = GPIO.BCM) -> None:
-        GPIO.setmode(numbering)
-        self._pin = pin
+    def __init__(self, pin: int = 12, duty: int = 50) -> None:
+        GPIO.setmode(GPIO.BCM)
         GPIO.setup(pin, GPIO.OUT)
+        self._pin = pin
+        self._duty = duty
         self._pwm = GPIO.PWM(pin, 1)
-        self._started = False
-
-    Tone = Tuple[int, float] # (frequency [Hz], duration [s])
-
-    def play(self, tones: Sequence[Tone], duty: float = 50.0) -> None:
-        """Play *tones* = [(f1, t1), …] using specified duty-cycle %."""
-        if not tones:
-            return
-
-        if not self._started:
-            self._pwm.start(duty)
-            self._started = True
-
-        for freq, dur in tones:
-            self._pwm.ChangeDutyCycle(duty)
-            self._pwm.ChangeFrequency(freq)
-            time.sleep(dur)
-
-        self._pwm.ChangeDutyCycle(0)
+        self._pwm.stop()
 
     def play_goal(self) -> None:
-        self.play([(4000, 2)])
+        pattern = [
+            (880, 0.15),
+            (1100, 0.15),
+            (1320, 0.30),
+        ]
+        for freq, dur in pattern:
+            self._pwm.ChangeFrequency(freq)
+            self._pwm.start(self._duty)
+            time.sleep(dur)
+            self._pwm.stop()
+            time.sleep(0.05)              # small gap between tones
 
     def stop(self) -> None:
+        """Stops any ongoing tone and releases the GPIO pin."""
         self._pwm.stop()
         GPIO.cleanup(self._pin)
