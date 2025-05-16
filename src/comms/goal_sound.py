@@ -2,13 +2,11 @@ import RPi.GPIO as GPIO
 import time
 
 class PWMBuzzer:
-    _NOTE_FREQ = {     # Hz (equal-temperament A4=440 Hz)
-        'A4': 440,
-        'B4': 494,
+    _FREQ = {
+        'F#4': 370,
+        'A#4': 466,
         'C#5': 554,
-        'D5': 587,
         'E5': 659,
-        'F#5': 740,
     }
 
     def __init__(self, pin: int = 12, duty: int = 50) -> None:
@@ -20,35 +18,26 @@ class PWMBuzzer:
         self._pwm.stop()
 
     def play_goal(self) -> None:
-        pattern = [
-            (880, 0.15),
-            (1100, 0.15),
-            (1320, 0.30),
-        ]
-
-        for freq, dur in pattern:
-            self._pwm.ChangeFrequency(freq)
+        for f, d in [(880, .15), (1100, .15), (1320, .30)]:
+            self._pwm.ChangeFrequency(f)
             self._pwm.start(self._duty)
-            time.sleep(dur)
+            time.sleep(d)
             self._pwm.stop()
-            time.sleep(0.05)
+            time.sleep(.05)
 
-    def play_rickroll(self) -> None:
-        melody = [
-            ('A4', 0.18), ('B4', 0.18), ('D5', 0.18), ('B4', 0.18),
-            ('F#5', 0.18), ('F#5', 0.18), ('E5', 0.30),
-
-            ('A4', 0.18), ('B4', 0.18), ('D5', 0.18), ('B4', 0.18),
-            ('E5', 0.18), ('E5', 0.18), ('D5', 0.18), ('C#5', 0.18),
-            ('B4', 0.30),
+    def play_rick_intro(self) -> None:
+        seq = [
+            ('F#4', .15), ('A#4', .15), ('C#5', .15), ('A#4', .15),
+            ('F#4', .15), ('F#4', .15),
+            ('F#4', .15), ('A#4', .15), ('C#5', .15), ('A#4', .15),
+            ('F#4', .15), ('E5',  .30),
         ]
-
-        for note, dur in melody:
-            self._pwm.ChangeFrequency(self._NOTE_FREQ[note])
+        for n, d in seq:
+            self._pwm.ChangeFrequency(self._FREQ[n])
             self._pwm.start(self._duty)
-            time.sleep(dur)
+            time.sleep(d)
             self._pwm.stop()
-            time.sleep(0.05)
+            time.sleep(.05)
 
     def stop(self) -> None:
         self._pwm.stop()
