@@ -1,6 +1,7 @@
 #import RPi.GPIO as GPIO
 from utils.gpio_compat import GPIO
 import time
+import math
 
 class PWMBuzzer:
     _FREQ = {
@@ -40,20 +41,29 @@ class PWMBuzzer:
             self._pwm.stop()
             time.sleep(.05)
 
-    def play_meow(self, total: float = 0.6) -> None:
-        step = 0.02
-        half = int(total / (2 * step))
+    def play_meow(self, total: float = 0.4) -> None:
+        step = 0.01
+        steps = int(total / step)
+        phase1 = int(steps * 0.3)  # Initial drop (30% of time)
+        phase2 = int(steps * 0.5)  # Vibrato middle (50% of time)
+        phase3 = steps - phase1 - phase2  # Final rise (20% of time)
         self._pwm.start(self._duty)
 
-        # downward glide: 950 Hz → 450 Hz
-        for i in range(half):
-            f = 950 - (500 * i / half)
+        # Phase 1: Quick drop from 1000 Hz to 600 Hz
+        for i in range(phase1):
+            f = 1000 - (400 * i / phase1)
             self._pwm.ChangeFrequency(f)
             time.sleep(step)
 
-        # upward inflection: 450 Hz → 700 Hz
-        for i in range(half):
-            f = 450 + (250 * i / half)
+        # Phase 2: Vibrato around 600 Hz (±50 Hz, 10 Hz oscillation)
+        for i in range(phase2):
+            f = 600 + 50 * math.sin(10 * 2 * math.pi * i / phase2)
+            self._pwm.ChangeFrequency(f)
+            time.sleep(step)
+
+        # Phase 3: Quick rise to 800 Hz
+        for i in range(phase3):
+            f = 600 + (200 * i / phase3)
             self._pwm.ChangeFrequency(f)
             time.sleep(step)
 
