@@ -8,7 +8,7 @@ from sub.rc import rc_server
 from sub.rcclient import rc_client
 from sub.stest import send_test
 from sub.switchtest import target_switch_test
-from sub.soundtest import sound_test
+from sub.soundtest import test_sound
 from sub.gotest import test_go_button
 from cli import parse_args
 from comms.uart import UartInterface
@@ -72,7 +72,7 @@ def main():
         "etest":        run_etest,
         "stest":        run_stest,
         "gotest":       lambda: test_go_button(),
-        "soundtest":    lambda: sound_test(),
+        "soundtest":    lambda: test_sound(),
         "switchtest":   lambda: target_switch_test(),
         "rcserver":     lambda: rc_server(args.uart, args.uart_baudrate, args.host, args.port),
         "rcclient":     lambda: rc_client(args.host, args.port),
