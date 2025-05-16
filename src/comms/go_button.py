@@ -7,8 +7,7 @@ class GoButton:
     _PIN: Final[int] = 16
 
     def __init__(self, bounce_s: float = 0.05) -> None:
-        # gpiozero handles pull-ups/downs and debouncing internally
-        self._btn = Button(self._PIN, pull_up=True, bounce_time=bounce_s)
+        self._btn = Button(self._PIN, pull_up=None, bounce_time=None)
 
     def wait_for_press(self, timeout: Optional[float] = None) -> None:
         """
