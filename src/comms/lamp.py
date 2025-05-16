@@ -1,4 +1,5 @@
-import RPi.GPIO as GPIO
+#import RPi.GPIO as GPIO
+from utils.gpio_compat import GPIO
 
 class GPIOLamp:
     def __init__(self, pin: int = 17, active_high: bool = True) -> None:
