@@ -7,6 +7,7 @@ from prain_uart import *
 from brain.graph import Graph
 from sensors.vision_nav.letter_ocr import detect_letter
 
+
 class NavState(Enum):
     TRAVELING_EDGE      = 1
     ARRIVED_AT_NODE     = 3
@@ -32,7 +33,7 @@ class PathPlanner:
         self.state = NavState.BEGIN
         self.logger.info(f"Initialized planner at node {self.current_node} with target {self.target_node}")
 
-        self.visited_nodes       = set()
+        self.visited_nodes       = []
         self.current_orientation = 0
         self.node_orientation    = 0
         self.angles_from_camera  = []
@@ -107,7 +108,11 @@ class PathPlanner:
             self.angles_from_camera = self._sort_angles_by_pathfinding(self.angles)
             self.current_angle_index = 0
             self.node_orientation = self.current_orientation
-            self.visited_nodes.add(self.current_node)
+            previous_node = self.get_previous_node()
+            if previous_node:
+                travelled_distance = self.get_distance_from_move_params(inbound_data)
+                self.graph.set_edge_distance(previous_node, self.current_node, travelled_distance)
+            self.visited_nodes.append(self.current_node)
             self.state = NavState.DECIDING_NEXT_ANGLE
 
             self.logger.info(f"[PLANNER] Arrived at {self.current_node}, detected angles: {self.angles_from_camera}")
@@ -229,8 +234,8 @@ class PathPlanner:
         queue = [(start_node, 0)]  # (node, distance)
         while queue:
             node, dist = queue.pop(0)
-            for neighbor, traversable in self.graph.get_neighbors(node).items():
-                if traversable and neighbor not in visited and not self.graph.is_node_blocked(neighbor):
+            for neighbor, data in self.graph.get_neighbors(node).items():
+                if data.get("traversable") and neighbor not in visited and not self.graph.is_node_blocked(neighbor):
                     if neighbor == target_node:
                         return dist + 1
                     visited.add(neighbor)
@@ -245,7 +250,7 @@ class PathPlanner:
     def _infer_next_node(self, current_node: str, angle: int) -> str:
         """Infer the next node after moving along an angle."""
         neighbors = self.graph.get_neighbors(current_node)
-        viable_neighbors = [n for n, t in neighbors.items() if t and n not in self.visited_nodes]
+        viable_neighbors = [n for n, d in neighbors.items() if d.get("traversable") and n not in self.visited_nodes]
 
         if not viable_neighbors:
             self.logger.debug(f"No viable neighbors from {current_node}, staying put")
@@ -258,7 +263,20 @@ class PathPlanner:
     def _infer_potential_node(self, current_node: str, angle: int) -> str | None:
         """Infer a potential next node for scoring, without direct angle mapping."""
         neighbors = self.graph.get_neighbors(current_node)
-        viable_neighbors = [n for n, t in neighbors.items() if t and n not in self.visited_nodes]
+        viable_neighbors = [n for n, d in neighbors.items() if d.get("traversable") and n not in self.visited_nodes]
         if not viable_neighbors:
             return None
         return min(viable_neighbors, key=lambda n: self._estimate_hop_distance(n, self.target_node), default=None)
+
+    def get_previous_node(self) -> str:
+        """Peek last visited node without removing it."""
+        if self.visited_nodes:
+            return self.visited_nodes[-1]
+        return None
+    
+    def get_distance_from_move_params(self, inbound_data) -> float:
+        for command, params in inbound_data:
+            if command == Command.MOVE and isinstance(params, MoveParams):
+                return params.distance
+        return float("inf")
+
