@@ -2,6 +2,7 @@ from enum import Enum
 import logging
 import random
 import numpy as np
+import math
 
 from prain_uart import *
 from brain.graph import Graph
@@ -40,6 +41,9 @@ class PathPlanner:
         self.angles              = None
         self.current_angle_index = 0
         self.last_chosen_angle   = None
+        self.estimated_goal_coordinates = {"A": (3464, 0), "B": (4000, 1732), "C": (3464, 3464)} # in mm
+        self.target_node_coordinates = self.estimated_goal_coordinates[target_node]
+        self.current_position = (1732, 0) # S coordinates of S
 
         # Scoring constants
         self.SECTION_BOOST = 3
@@ -108,9 +112,9 @@ class PathPlanner:
             self.angles_from_camera = self._sort_angles_by_pathfinding(self.angles)
             self.current_angle_index = 0
             self.node_orientation = self.current_orientation
-            previous_node = self.get_previous_node()
+            previous_node = self._get_previous_node()
             if previous_node:
-                travelled_distance = self.get_distance_from_move_params(inbound_data)
+                travelled_distance = self._get_distance_from_move_params(inbound_data)
                 self.graph.set_edge_distance(previous_node, self.current_node, travelled_distance)
             self.visited_nodes.append(self.current_node)
             self.state = NavState.DECIDING_NEXT_ANGLE
@@ -130,20 +134,25 @@ class PathPlanner:
                 self.logger.warning(f"[PLANNER] All angles tried at {self.current_node}, marking as blocked")
                 return encode_stop(Address.MOTION_CTRL), self.current_node
 
-            angle_choice = self._get_random_angle(self.angles)
-            while 170 < angle_choice < 190:
-                angle_choice = self._get_random_angle(self.angles) # self.angles_from_camera[self.current_angle_index]
+            # angle_choice = self._get_random_angle(self.angles)
+            # while 170 < angle_choice < 190:
+            #     angle_choice = self._get_random_angle(self.angles)
+            angle_choice = self._choose_best_direction()
+            if angle_choice is None:
+                self.logger.warning(f"[PLANNER] No angles available to choose from, marking as blocked")
+                self.state = NavState.BLOCKED
+                return encode_stop(Address.MOTION_CTRL), self.current_node
 
             print(f"[PLANNER] chosen angle: {angle_choice}")
 
             # turn_amount = angle_choice - self.node_orientation
             turn_amount = 360 - angle_choice if angle_choice > 180 else -angle_choice
+            turn_amount = turn_amount * 10
             self.current_orientation = angle_choice
             self.last_chosen_angle = angle_choice
             self.state = NavState.CHECK_NEXT_ANGLE
 
             self.logger.debug(f"[PLANNER] Turning to angle {angle_choice} (turn amount: {turn_amount})")
-            turn_amount = turn_amount * 10
             return encode_turn(Address.MOTION_CTRL, turn_amount), self.current_node
 
         # -------------- CHECK_NEXT_ANGLE ---------------
@@ -268,15 +277,45 @@ class PathPlanner:
             return None
         return min(viable_neighbors, key=lambda n: self._estimate_hop_distance(n, self.target_node), default=None)
 
-    def get_previous_node(self) -> str:
+    def _get_previous_node(self) -> str:
         """Peek last visited node without removing it."""
         if self.visited_nodes:
             return self.visited_nodes[-1]
         return None
     
-    def get_distance_from_move_params(self, inbound_data) -> float:
+    def _get_distance_from_move_params(self, inbound_data) -> float:
         for command, params in inbound_data:
             if command == Command.MOVE and isinstance(params, MoveParams):
                 return params.distance
         return float("inf")
+    
+    def _simulate_step_from(self, position, angle_deg, step_length):
+        """
+        Converts a step in a given angle (camera frame: 0° = up, clockwise) to Cartesian.
+        """
+        angle_rad = math.radians((angle_deg - 90) % 360)
+        dx = step_length * math.cos(angle_rad)
+        dy = step_length * math.sin(angle_rad)
+        return (position[0] + dx, position[1] + dy)
+
+    def _distance_to_target(self, pos):
+        return math.sqrt((pos[0] - self.target_node_coordinates[0])**2 + (pos[1] - self.target_node_coordinates[1])**2)
+
+    def _choose_best_direction(self, current_position, detected_angles, step_length=500) -> int:
+        best_angle = None
+        min_distance = float('inf')
+        
+        for angle in detected_angles:
+            new_pos = self._simulate_step_from(current_position, angle, step_length)
+            dist = self._distance_to_target(new_pos)
+            self.logger.debug(f"[PLANNER] Angle {angle}° → Step to {new_pos} → Distance to goal: {dist:.2f} mm")
+            
+            if dist < min_distance:
+                min_distance = dist
+                best_angle = angle
+                
+        return best_angle
+    
+    def _update_orientation(self, angle_choice) -> int:
+        self.current_orientation = int((self.current_orientation + angle_choice) % 360)
 
