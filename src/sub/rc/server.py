@@ -55,7 +55,7 @@ def logger_loop(uart_manager: UartManager) -> None:
 def start_server(
     host: str = "localhost",
     port: int = 5000,
-    uart_port: str = "/dev/ttyS0",
+    uart_port: str = "/dev/ttyAMA0",
     uart_baud: int = 115200
 ) -> threading.Thread:
     uart_manager = UartManager(uart_port, uart_baud)
