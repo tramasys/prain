@@ -4,3 +4,4 @@ pyserial>=3.5
 numpy
 picamera2
 scikit-learn
+networkx
