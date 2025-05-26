@@ -7,6 +7,7 @@ from comms.manager import UartManager
 from sensors.vision_nav.visionnavigator import VisionNavigator
 # from sensors.vision_nav.source import CameraSource
 from sensors.lidar import LidarSensor
+from comms.lamp import GPIOLamp
 from brain.planner import PathPlanner
 from brain.graph import Graph
 from prain_uart import *
@@ -17,6 +18,7 @@ class HighLevelController:
 
         self.camera = VisionNavigator(goal_node=target_node)
         self.lidar = LidarSensor(bus=lidar_bus, address=lidar_address)
+        self.lamp = GPIOLamp(pin=27)
 
         self.graph = Graph()
         self.planner = PathPlanner(
@@ -34,6 +36,7 @@ class HighLevelController:
         self.uart_manager.start()
         self.camera.start()
         self.lidar.start()
+        self.lamp.on()
 
         self._decision_thread = threading.Thread(target=self._main_loop, daemon=True)
         self._decision_thread.start()
@@ -66,7 +69,7 @@ class HighLevelController:
 
                 decoder = Decoder(command)
                 if decoder.command.name == "TURN":
-                    time.sleep(1)
+                    time.sleep(2)
 
             time.sleep(0.05)
 
@@ -78,3 +81,4 @@ class HighLevelController:
         self.uart_manager.stop()
         self.camera.stop()
         self.lidar.stop()
+        self.lamp.off()

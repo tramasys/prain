@@ -75,8 +75,8 @@ class CameraSource(VideoSource):
                     lores={"size": (320, 320), "format": "YUV420"}
                 )
             )
-        except:
-            self.__log.error(f'Picamera2 not instantiated!')
+        except Exception as e:
+            self.__log.error(f'Picamera2 not instantiated! {e}')
 
     def __frame_callback(self, request):
         with self.__frame_lock:
