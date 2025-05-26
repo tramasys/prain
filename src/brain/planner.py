@@ -97,7 +97,7 @@ class PathPlanner:
                     self.current_node = self._generate_new_id()
                     # self.node_positions[self.current_node] = self.current_position
 
-                if goal_node_reached:
+                if goal_node_reached or self._is_close_to_target():
                     self.state = NavState.GOAL_REACHED
                     self.logger.info("[PLANNER] Goal reached")
                     return encode_stop(Address.MOTION_CTRL), self.current_node
@@ -122,12 +122,13 @@ class PathPlanner:
                     self.state = NavState.BLOCKED
                     return encode_stop(Address.MOTION_CTRL), self.current_node
 
+                
                 angle_choice = self._choose_best_direction(self.angles)
                 if angle_choice is None:
                     self.state = NavState.BLOCKED
                     return encode_stop(Address.MOTION_CTRL), self.current_node
 
-                self.logger.info(f"[PLANNER] Chose angle was {angle_choice}")
+                self.logger.info(f"[PLANNER] Chose angle: {angle_choice} from {self.angles}")
                 turn_amount = (360 - angle_choice if angle_choice > 180 else -angle_choice) * 10
 
                 self._update_orientation(angle_choice)
@@ -304,12 +305,27 @@ class PathPlanner:
             if dist <= tolerance:
                 return node
         return None
+    
+    def _is_close_to_target(self, threshold: float = 200.0) -> bool:
+        """
+        Returns True if the current position is within `threshold` mm of the target node coordinates.
+        """
+        tx, ty = self.target_node_coordinates
+        cx, cy = self.current_position
+        distance = math.hypot(cx - tx, cy - ty)
+
+        self.logger.debug(f"[PLANNER] Distance to target node {self.target_node}: {distance:.2f} mm")
+
+        return distance <= threshold
+
         
     def _process_inbound_data(self, inbound_data):
         for cmd, params in inbound_data:
             match cmd:
                 case Command.RESPONSE:
                     self._handle_response(params)
+                case Command.INFO:
+                    self._handle_info(params)
                 case _:
                     self.logger.warning(f"Unhandled frame: {cmd.name} with {params}")
                     
@@ -317,6 +333,10 @@ class PathPlanner:
         if params.poll_id == PollId.DISTANCE:
             self.logger.warning(f"[PLANNER] Last travelled distance was: {params.data}")
             self.last_travelled_distance = params.data
+            
+    def _handle_info(self, params: InfoParams):
+        if params.flag == InfoFlag.NODE_DETECTED:
+            self.logger.info(f'[PLANNER] Node detected from Motion Controller')
 
     def _generate_new_id(self) -> str:
         node_id = f"n{self.node_id_counter}"
