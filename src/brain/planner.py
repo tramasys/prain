@@ -8,7 +8,7 @@ import networkx as nx
 from prain_uart import *
 from brain.graph import Graph
 from sensors.vision_nav.letter_ocr import detect_letter
-
+from comms.goal_sound import PWMBuzzer
 
 class NavState(Enum):
     TRAVELING_EDGE      = 1
@@ -35,6 +35,7 @@ class PathPlanner:
         self.target_node = target_node
         self.logger = logger
         self.debug = debug
+        self.buzzer = PWMBuzzer()
 
         self.state = NavState.BEGIN
         self.logger.info(f"Initialized planner at node {self.current_node} with target {self.target_node}")
@@ -43,10 +44,12 @@ class PathPlanner:
         self.angles              = None
         self.last_chosen_angle   = None
         self.last_travelled_distance = 0
-        self.estimated_goal_coordinates = {"A": (3464, 3464), "B": (1732, 4000), "C": (0, 3464)} # in mm (x, y)
+        self.estimated_goal_coordinates = {"A": (3118, 2700), "B": (1559, 3600), "C": (0, 2700)} # in mm (x, y)
         self.target_node_coordinates = self.estimated_goal_coordinates[target_node]
-        self.current_position = (1732, 0) # S coordinates of S (x, y)
+        self.current_position = (1559, 0) # S coordinates of S (x, y)
+        self.nxgraph.add_node(self.current_node, position=self.current_position)
         self.node_id_counter = 1
+        self.first_node_reached = False
 
         # Scoring constants
         self.SECTION_BOOST = 3
@@ -84,35 +87,43 @@ class PathPlanner:
                 return None, self.current_node
 
             case NavState.ARRIVED_AT_NODE:
-                self.logger.info(f"[PLANNER] ARRIVED_AT_NODE state reached")
+                self.logger.info("[PLANNER] ARRIVED_AT_NODE reached")
 
-                if self.current_node != "S": self._update_position()
+                # --- 1) Entry-Stub: beim ersten Mal nur das Flag setzen und S in den Stack packen ---
+                if not self.first_node_reached:
+                    self.first_node_reached = True
+                    # Startknoten S bleibt bei (1732, 0)
+                    self.node_stack.append(self.current_node)
+                    self.logger.info("[PLANNER] Entry at S abgeschlossen – weiterhin in DECIDING_NEXT_ANGLE")
+                    self.state = NavState.DECIDING_NEXT_ANGLE
+                    return None, self.current_node
 
-                self.nxgraph.add_node(self.current_node, position=self.current_position)
-                matched_node = self._resolve_node_by_position()
-                
-                if matched_node and matched_node not in self.nxgraph.nodes.keys():
-                    self.current_node = matched_node
-                else:
-                    self.current_node = self._generate_new_id()
-                    # self.node_positions[self.current_node] = self.current_position
+                # --- 2) Ab jetzt: echte Position aktualisieren und neuen Knoten anlegen ---
+                # berechne new position
+                self._update_position()
+                self.logger.debug(f"[PLANNER] New position: {self.current_position}")
 
+                # neuen Knoten erzeugen
+                new_node = self._generate_new_id()
+                self.current_node = new_node
+                self.nxgraph.add_node(new_node, position=self.current_position)
+                self.logger.info(f"[PLANNER] Created node '{new_node}' at {self.current_position}")
+
+                # Edge vom vorherigen zum aktuellen Knoten
+                prev = self.node_stack[-1]
+                self.nxgraph.add_edge(prev, new_node, weight=self.last_travelled_distance)
+                self.logger.debug(f"[PLANNER] Added edge {prev}→{new_node} ({self.last_travelled_distance} mm)")
+
+                # Goal-Check
                 if goal_node_reached or self._is_close_to_target():
                     self.state = NavState.GOAL_REACHED
+                    self.buzzer.play_goal()
                     self.logger.info("[PLANNER] Goal reached")
                     return encode_stop(Address.MOTION_CTRL), self.current_node
 
-                previous_node = self._get_previous_node()
-                if previous_node:
-                    self.nxgraph.add_edge(self.current_node, previous_node, weight=self.last_travelled_distance)
-
-                self.node_stack.append(self.current_node)
-                # self.node_orientation = self.current_orientation
-                # self.angles_from_camera = self.angles
-                # self.current_angle_index = 0
+                # Stack & weiter zum Angle-Deciding
+                self.node_stack.append(new_node)
                 self.state = NavState.DECIDING_NEXT_ANGLE
-
-                self.logger.info(f"[PLANNER] Arrived at {self.current_node}, detected angles: {self.angles}")
                 return None, self.current_node
 
             case NavState.DECIDING_NEXT_ANGLE:
@@ -292,21 +303,23 @@ class PathPlanner:
         self.current_orientation = int((self.current_orientation + angle_choice) % 360)
         
     def _update_position(self):
-        angle_rad = math.radians(self.current_orientation % 360)
+        angle_rad = math.radians((90 - self.current_orientation) % 360)
         dx = self.last_travelled_distance * math.cos(angle_rad)
         dy = self.last_travelled_distance * math.sin(angle_rad)
         x, y = self.current_position
         self.current_position = (x + dx, y + dy)
         self.logger.debug(f"[PLANNER] Updated position to {self.current_position} after moving {self.last_travelled_distance} mm at {self.current_orientation}°")
         
-    def _resolve_node_by_position(self, tolerance=200) -> str | None:
+    def _resolve_node_by_position(self, tolerance=200, skip_node=None) -> str | None:
         for node, pos in self.nxgraph.nodes.data('position'):
+            if node == skip_node:
+                continue
             dist = math.hypot(self.current_position[0] - pos[0], self.current_position[1] - pos[1])
             if dist <= tolerance:
                 return node
         return None
     
-    def _is_close_to_target(self, threshold: float = 200.0) -> bool:
+    def _is_close_to_target(self, threshold: float = 400.0) -> bool:
         """
         Returns True if the current position is within `threshold` mm of the target node coordinates.
         """
@@ -330,9 +343,11 @@ class PathPlanner:
                     self.logger.warning(f"Unhandled frame: {cmd.name} with {params}")
                     
     def _handle_response(self, params: ResponseParams):
-        if params.poll_id == PollId.DISTANCE:
-            self.logger.warning(f"[PLANNER] Last travelled distance was: {params.data}")
+        if isinstance(params, ResponseParams) and params.poll_id == PollId.DISTANCE.value:
+            self.logger.info(f"[PLANNER] Last travelled distance was: {params.data}")
             self.last_travelled_distance = params.data
+        else:
+            self.logger.warning(f"[PLANNER] RESPONSE ignored – unexpected poll_id: {params.poll_id}")
             
     def _handle_info(self, params: InfoParams):
         if params.flag == InfoFlag.NODE_DETECTED:

@@ -69,7 +69,7 @@ class HighLevelController:
 
                 decoder = Decoder(command)
                 if decoder.command.name == "TURN":
-                    time.sleep(2)
+                    time.sleep(3)
 
             time.sleep(0.05)
 
