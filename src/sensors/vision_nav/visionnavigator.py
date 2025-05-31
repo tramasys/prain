@@ -113,11 +113,11 @@ class VisionNavigator:
 
                 detector.update_frame(frame_lores)
                 processed_frame, edges = detector.get_edges()
-                # if not image_for_goal_node_detection and edges:
-                #     image_for_goal_node_detection = processed_frame
-                #     letter, _ = detect_letter(image_for_goal_node_detection)
-                #     if letter and letter == self.__goal_node:
-                #         self.__set_goal_node_detected()
+                if image_for_goal_node_detection is None and edges:
+                    image_for_goal_node_detection = frame_lores
+                    letter, _ = detect_letter(image_for_goal_node_detection)
+                    if letter and letter == self.__goal_node:
+                        self.__set_goal_node_detected()
 
                 if edges:
                     node.extend_edge_candidates(edges)
