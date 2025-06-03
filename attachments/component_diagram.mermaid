@@ -1,0 +1,33 @@
+graph TD
+
+    Main["main.py"]
+    Controller["HighLevelController (core/controller.py)"]
+    Planner["PathPlanner (brain/planner.py)"]
+    GraphMod["Graph (brain/graph.py)"]
+    Vision["VisionNavigator (sensors/vision_nav/visionnavigator.py)"]
+    Lidar["LidarSensor (sensors/lidar.py)"]
+    UartManager["UartManager (comms/manager.py)"]
+    Uart["UartInterface (comms/uart.py)"]
+    Lamp["GPIOLamp (comms/lamp.py)"]
+    TargetDetector["TargetDetector (comms/target.py)"]
+    GoButton["GoButton (comms/go_button.py)"]
+    GoalSound["PWMBuzzer (comms/goal_sound.py)"]
+    Helper["helper.py (utils/)"]
+
+    Main --> Controller
+    Main --> TargetDetector
+    Main --> GoButton
+
+    Controller --> UartManager
+    Controller --> Planner
+    Controller --> Vision
+    Controller --> Lidar
+    Controller --> Lamp
+
+    Planner --> GraphMod
+    Planner --> GoalSound
+
+    UartManager --> Uart
+    UartManager --> Helper
+
+    Vision --> Lidar
