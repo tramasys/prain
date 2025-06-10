@@ -4,11 +4,14 @@ import random
 import numpy as np
 import math
 import networkx as nx
+import time
 
 from prain_uart import *
 from brain.graph import Graph
 from sensors.vision_nav.letter_ocr import detect_letter
 from comms.goal_sound import PWMBuzzer
+from comms.manager import UartManager
+from sensors.lidar import LidarSensor
 
 class NavState(Enum):
     TRAVELING_EDGE      = 1
@@ -25,6 +28,8 @@ class PathPlanner:
         graph: Graph,
         target_node: str,
         logger: logging.Logger,
+        manager: UartManager | None = None,
+        lidar: LidarSensor | None = None,
         debug: bool=False
     ):
 
@@ -51,6 +56,9 @@ class PathPlanner:
         self.node_id_counter = 1
         self.first_node_reached = False
 
+        self.uart_manager = manager
+        self.lidar = lidar
+
         # Scoring constants
         self.SECTION_BOOST = 3
         self.WRONG_DIRECTION_PENALTY = 0.5
@@ -64,11 +72,12 @@ class PathPlanner:
             self.angles = angles
 
         lidar = sensor_data.get("lidar", (None, None, None))
-        dist_cm, _, _ = lidar
+        dist_cm, flux, _ = lidar
         goal_node_reached = sensor_data.get("goal-node-reached", False)
 
         self.logger.info(f"[PLANNER] next_action called with persisted angles: {self.angles}, lidar: {lidar}")
         self._process_inbound_data(inbound_data)
+        print(f'Goal node reached: {goal_node_reached}')
 
         match self.state:
             
@@ -82,7 +91,7 @@ class PathPlanner:
 
                 if self.angles:
                     self.state = NavState.ARRIVED_AT_NODE
-                    return encode_stop(Address.MOTION_CTRL), self.current_node
+                    return None, self.current_node
 
                 return None, self.current_node
 
@@ -115,7 +124,7 @@ class PathPlanner:
                 self.logger.debug(f"[PLANNER] Added edge {prev}→{new_node} ({self.last_travelled_distance} mm)")
 
                 # Goal-Check
-                if goal_node_reached or self._is_close_to_target():
+                if goal_node_reached:
                     self.state = NavState.GOAL_REACHED
                     self.buzzer.play_goal()
                     self.logger.info("[PLANNER] Goal reached")
@@ -142,13 +151,49 @@ class PathPlanner:
                 self.logger.info(f"[PLANNER] Chose angle: {angle_choice} from {self.angles}")
                 turn_amount = (360 - angle_choice if angle_choice > 180 else -angle_choice) * 10
 
+                self.last_turn_amount = turn_amount
+
                 self._update_orientation(angle_choice)
                 self.last_chosen_angle = angle_choice
                 self.state = NavState.CHECK_NEXT_ANGLE
+                self.logger.info(f'turn_amount: {turn_amount}, current orientation: {self.current_orientation}')
 
                 return encode_turn(Address.MOTION_CTRL, turn_amount), self.current_node
 
-            case NavState.CHECK_NEXT_ANGLE:
+            case NavState.CHECK_NEXT_ANGLE:                
+                self.logger.info(f"DIST: {dist_cm} cm, last angle: {self.last_chosen_angle}")
+                
+                time.sleep(1)
+                
+                sweep_dic = {
+                    "1": ( "-100", False),
+                    "2": ( "50", False),
+                    "3": ( "50", False),
+                    "4": ( "50", False),
+                    "5": ( "50", False),
+                    "6": ( "-100", False)
+                }
+                
+                rel_turn = 0
+                
+                for sweep_id, (angle, is_done) in sweep_dic.items():
+                    turn_amount = int(angle)
+                    self.logger.info(f"TURN {turn_amount}")
+                    rel_turn += turn_amount
+                    frame = encode_turn(Address.MOTION_CTRL, turn_amount)
+                    self.uart_manager.send_frame(frame)                                
+                    time.sleep(1)
+                    dist, fl, _ = self.lidar.get_data()
+                
+                    if dist >= 45 and dist <= 205 and fl > 2000:
+                        equalising_frame = encode_turn(Address.MOTION_CTRL, -rel_turn)
+                        self.uart_manager.send_frame(equalising_frame)
+                        time.sleep(1)
+                        self.logger.info("PYLON ALERT!!!!!")
+                        self.angles.remove(self.last_chosen_angle)
+                        self.state = NavState.DECIDING_NEXT_ANGLE
+                        return encode_turn(Address.MOTION_CTRL, -self.last_turn_amount), self.current_node
+                
                 self.logger.info("[PLANNER] CHECK_NEXT_ANGLE state reached")
                 self.state = NavState.TRAVELING_EDGE
                 self.angles = None

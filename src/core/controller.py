@@ -16,7 +16,7 @@ class HighLevelController:
     def __init__(self, uart_port: str, uart_baudrate: int, lidar_bus: int, lidar_address: int, target_node: str, logger: logging.Logger):
         self.uart_manager = UartManager(uart_port, uart_baudrate)
 
-        self.camera = VisionNavigator(goal_node=target_node)
+        self.camera = VisionNavigator(goal_node=target_node, logger=logger)
         self.lidar = LidarSensor(bus=lidar_bus, address=lidar_address)
         self.lamp = GPIOLamp(pin=27)
 
@@ -24,7 +24,9 @@ class HighLevelController:
         self.planner = PathPlanner(
             graph=self.graph,
             target_node=target_node,
-            logger=logger
+            logger=logger,
+            manager=self.uart_manager,
+            lidar=self.lidar,
         )
 
         self.logger = logger

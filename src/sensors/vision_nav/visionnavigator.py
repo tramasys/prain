@@ -14,12 +14,13 @@ from sensors.vision_nav.node import Node
 from sensors.vision_nav.letter_ocr import detect_letter
 
 class VisionNavigator:
-    def __init__(self, video_source: VideoSource = CameraSource(), output_path='output.mp4', debug=False, goal_node='A'):
+    def __init__(self, video_source: VideoSource = CameraSource(), output_path='output.mp4', debug=False, goal_node='A', logger=None):
         self.__running = False
         self.__video_source = video_source
         self.__output_path = output_path
         self.__debug = debug
-        self.__log = logging.getLogger(self.__class__.__name__)
+        #self.__log = logging.getLogger(self.__class__.__name__)
+        self.__log = logger
         _, _, self.__fps = self.__video_source.get_info()
 
         self.__capture_queue = Queue(maxsize=20)
@@ -113,11 +114,12 @@ class VisionNavigator:
 
                 detector.update_frame(frame_lores)
                 processed_frame, edges = detector.get_edges()
-                if image_for_goal_node_detection is None and edges:
-                    image_for_goal_node_detection = frame_lores
-                    letter, _ = detect_letter(image_for_goal_node_detection)
-                    if letter and letter == self.__goal_node:
-                        self.__set_goal_node_detected()
+                # if image_for_goal_node_detection is None and edges:
+                #     image_for_goal_node_detection = frame_lores
+                #     letter, _ = detect_letter(image_for_goal_node_detection)
+                #     self.__log.info(f'Letter: {letter}')
+                #     if letter and letter == self.__goal_node:
+                #         self.__set_goal_node_detected()
 
                 if edges:
                     node.extend_edge_candidates(edges)
