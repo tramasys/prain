@@ -7,6 +7,7 @@ class Node:
     def __init__(self) -> None:
         self.__edge_candidates: list[EdgeCandidate] = []
         self.__edges: list[Edge] = []
+        self.__node_captures = []
         
     def add_edge_candidates(self, edge_candidate: EdgeCandidate) -> None:
         self.__edge_candidates.append(edge_candidate)
@@ -21,6 +22,17 @@ class Node:
     def extend_edges(self, edges: list[Edge]): self.__edges.extend(edges)
         
     def get_edges(self): return self.__edges
+    
+    def add_node_capture(self, frame, intensity): self.__node_captures.append((frame, intensity)) # number of circles detected in the frame
+    
+    def get_node_captures(self): return self.__node_captures
+    
+    def get_best_node_capture(self):
+        if not self.__node_captures:
+            return None
+        # Sort by intensity (number of circles detected) and return the best one
+        best_capture = max(self.__node_captures, key=lambda x: x[1])
+        return best_capture
     
     def __str__(self):
         return str(self.__edges)

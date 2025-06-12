@@ -49,6 +49,7 @@ class HighLevelController:
                 "camera-angles": self.camera.get_data(),
                 "goal-node-reached": self.camera.get_goal_node_reached(),
                 "lidar": self.lidar.get_data(),
+                "best-node-image": self.camera.pop_best_node_image()
             }
 
             inbound_data = []

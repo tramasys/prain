@@ -29,6 +29,9 @@ class VisionNavigator:
         self.__goal_node = goal_node
         self.__goal_node_detected = False
         self.__latest_main = None
+        
+        self.__best_node_image = None
+        self.__best_node_image_lock = threading.Lock()
 
         self.__writer_thread = None
         self.__capture_thread = None
@@ -113,7 +116,8 @@ class VisionNavigator:
                 frame_lores, frame_main = item
 
                 detector.update_frame(frame_lores)
-                processed_frame, edges = detector.get_edges()
+                processed_frame, edges, circle_count = detector.get_edges()
+                node.add_node_capture(frame_lores, circle_count)
                 # if image_for_goal_node_detection is None and edges:
                 #     image_for_goal_node_detection = frame_lores
                 #     letter, _ = detect_letter(image_for_goal_node_detection)
@@ -126,6 +130,11 @@ class VisionNavigator:
 
                 if Detector.distinct_node_detected() and node.has_edge_candidates():
                     edge_angles = node.process()
+                    best_node_image, _ = node.get_best_node_capture()
+                    if best_node_image is not None:
+                        with self.__best_node_images_lock:
+                            self.__best_node_images.append(best_node_image)
+
                     self.__log.info(f'Node: {edge_angles}')
                     self.__node_stack.append(edge_angles)
                     node = Node()
@@ -193,6 +202,18 @@ class VisionNavigator:
     
     def get_goal_node_reached(self) -> bool:
         return self.__goal_node_detected
+
+    def pop_best_node_image(self):
+        """Returns and clears the best node image (thread-safe)."""
+        with self.__best_node_image_lock:
+            image = self.__best_node_image
+            self.__best_node_image = None
+            return image
+
+    def peek_best_node_image(self):
+        """Returns the best node image without clearing it (thread-safe)."""
+        with self.__best_node_image_lock:
+            return self.__best_node_image
 
     def is_running(self):
         return self.__running

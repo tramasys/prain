@@ -11,7 +11,7 @@ class Detector:
 
     def get_edges(self):
         self.__frame = cv2.cvtColor(self.__frame, cv2.COLOR_BGR2HSV)
-        self.__frame, node_detected = self.__detect_node()
+        self.__frame, node_detected, circle_count = self.__detect_node()
         
         if node_detected:
             Detector.frame_count_since_last_node = 0
@@ -21,7 +21,7 @@ class Detector:
         self.__frame, edges = self.__extract_straight_sharp_edges(self.__frame, node_detected)
         if self.debug:
             self.__frame = self.__draw_node_detected_signal(self.__frame, node_detected)
-        return self.__frame, edges
+        return self.__frame, edges, circle_count
 
     def __detect_node(self, blur_kernel=(5, 5)):
         _, _, v_channel = cv2.split(self.__frame)
@@ -37,6 +37,7 @@ class Detector:
             minRadius=int(0.05 * self.__frame.shape[0]),
             maxRadius=int(0.35 * self.__frame.shape[0])
         )
+        circle_count = len(circles)
 
         output_img = cv2.cvtColor(self.__frame, cv2.COLOR_HSV2BGR)
         node_detected = False
@@ -46,7 +47,7 @@ class Detector:
             circles = self.__filter_circles_by_std(circles, std_factor=1)
 
             if len(circles) == 0:
-                return output_img, False
+                return output_img, False, 0
 
             avg_x = int(np.mean(circles[:, 0]))
             avg_y = int(np.mean(circles[:, 1]))
@@ -55,7 +56,7 @@ class Detector:
             img_center_x = output_img.shape[1] // 2
             tolerance = 0.1 * output_img.shape[0]
             if abs(avg_x - img_center_x) > tolerance:
-                return output_img, False
+                return output_img, False, 0
 
             node_detected = True
 
@@ -67,7 +68,7 @@ class Detector:
             #     cv2.circle(output_img, (avg_x, avg_y), avg_r, (255, 255, 0), 2)
             #     cv2.circle(output_img, (avg_x, avg_y), 2, (0, 0, 255), 3)
 
-        return output_img, node_detected
+        return output_img, node_detected, circle_count
 
     def __filter_circles_by_std(self, circles, std_factor=1.0):
         x, y = circles[:, 0], circles[:, 1]
