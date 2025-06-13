@@ -117,7 +117,8 @@ class VisionNavigator:
 
                 detector.update_frame(frame_lores)
                 processed_frame, edges, circle_count = detector.get_edges()
-                node.add_node_capture(frame_lores, circle_count)
+                if circle_count > 0:
+                    node.add_node_capture(frame_lores, circle_count)
                 # if image_for_goal_node_detection is None and edges:
                 #     image_for_goal_node_detection = frame_lores
                 #     letter, _ = detect_letter(image_for_goal_node_detection)
@@ -132,13 +133,12 @@ class VisionNavigator:
                     edge_angles = node.process()
                     best_node_image, _ = node.get_best_node_capture()
                     if best_node_image is not None:
-                        with self.__best_node_images_lock:
-                            self.__best_node_images.append(best_node_image)
+                        self.__set_best_node_image(best_node_image)
 
                     self.__log.info(f'Node: {edge_angles}')
                     self.__node_stack.append(edge_angles)
                     node = Node()
-                    image_for_goal_node_detection = None
+                    # image_for_goal_node_detection = None
 
                 if self.__debug:
                     try:
@@ -209,6 +209,14 @@ class VisionNavigator:
             image = self.__best_node_image
             self.__best_node_image = None
             return image
+        
+    def __set_best_node_image(self, image):
+        """Sets the best node image (thread-safe)."""
+        with self.__best_node_image_lock:
+            if isinstance(image, np.ndarray):
+                self.__best_node_image = image.copy()
+            else:
+                self.__log.error("Best node image must be a numpy array.")
 
     def peek_best_node_image(self):
         """Returns the best node image without clearing it (thread-safe)."""

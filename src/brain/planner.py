@@ -5,6 +5,9 @@ import numpy as np
 import math
 import networkx as nx
 import time
+import os
+import uuid
+import cv2
 
 from prain_uart import *
 from brain.graph import Graph
@@ -74,13 +77,13 @@ class PathPlanner:
 
         lidar = sensor_data.get("lidar", (None, None, None))
         dist_cm, flux, _ = lidar
-        goal_node_reached = sensor_data.get("goal-node-reached", False)
         
-        self.best_node_image = sensor_data.get("best-node-image", None)
+        best_node_image = sensor_data.get("best-node-image", None)
+        if best_node_image is not None:
+            self.best_node_image = best_node_image
 
         self.logger.info(f"[PLANNER] next_action called with persisted angles: {self.angles}, lidar: {lidar}")
         self._process_inbound_data(inbound_data)
-        print(f'Goal node reached: {goal_node_reached}')
 
         match self.state:
             
@@ -99,6 +102,11 @@ class PathPlanner:
                 return None, self.current_node
 
             case NavState.ARRIVED_AT_NODE:
+                if self.best_node_image is None:
+                    self.logger.warning("[PLANNER] Waiting for best node image to arrive")
+                    time.sleep(0.5)
+                    return None, self.current_node
+                
                 self.logger.info("[PLANNER] ARRIVED_AT_NODE reached")
 
                 # --- 1) Entry-Stub: beim ersten Mal nur das Flag setzen und S in den Stack packen ---
@@ -307,10 +315,18 @@ class PathPlanner:
         """
         Returns True if the target node has been reached.
         """
+        if self.best_node_image is None:
+            return False
+        
+        self.save_best_node_image()
+        
+        self.logger.debug(f"[PLANNER] Checking if goal node {self.target_node} is reached...")
         letter, _ = detect_letter(self.best_node_image)
+        self.logger.debug(f"[PLANNER] Detected letter: {letter}")
         if letter == self.target_node:
             self.logger.info(f"[PLANNER] Goal node {self.target_node} reached with letter {letter} at position {self.current_position}")
             return True
+        self.logger.info(f"[PLANNER] Goal node {self.target_node} not reached yet. Continue navigating...")
         return False
     
     def turn(self, angle: int) -> None:
@@ -329,6 +345,27 @@ class PathPlanner:
     def current_positions(self) -> dict:
         return self.node_positions
 
+    def save_best_node_image(self, directory="images") -> str | None:
+        """
+        Saves the current best_node_image to the relative 'images/' directory.
+        Returns the filename if successful, or None otherwise.
+        """
+        if self.best_node_image is None:
+            self.logger.warning("[PLANNER] Tried to save image, but best_node_image is None.")
+            return None
 
+        # Ensure relative directory exists
+        os.makedirs(directory, exist_ok=True)
+
+        filename = f"best_node_image_{self.current_node}_{uuid.uuid4().hex[:6]}.jpg"
+        full_path = os.path.join(directory, filename)
+
+        success = cv2.imwrite(full_path, self.best_node_image)
+        if success:
+            self.logger.info(f"[PLANNER] Saved best node image as {full_path}")
+            return full_path
+        else:
+            self.logger.error(f"[PLANNER] Failed to save best node image to {full_path}")
+            return None
 
 

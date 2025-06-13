@@ -37,7 +37,7 @@ class Detector:
             minRadius=int(0.05 * self.__frame.shape[0]),
             maxRadius=int(0.35 * self.__frame.shape[0])
         )
-        circle_count = len(circles)
+        circle_count = len(circles) if circles is not None else 0
 
         output_img = cv2.cvtColor(self.__frame, cv2.COLOR_HSV2BGR)
         node_detected = False
@@ -53,9 +53,13 @@ class Detector:
             avg_y = int(np.mean(circles[:, 1]))
             avg_r = int(np.mean(circles[:, 2]))
 
-            img_center_x = output_img.shape[1] // 2
-            tolerance = 0.1 * output_img.shape[0]
-            if abs(avg_x - img_center_x) > tolerance:
+            img_center_x = output_img.shape[0] // 2
+            img_center_y = output_img.shape[1] // 2
+            tolerance_x = 0.1 * output_img.shape[0]
+            tolerance_y = 0.5 * output_img.shape[1]
+            if abs(avg_x - img_center_x) > tolerance_x:
+                return output_img, False, 0
+            if abs(avg_y - img_center_y) > tolerance_y:
                 return output_img, False, 0
 
             node_detected = True
