@@ -43,6 +43,8 @@ class UartManager:
 
             except Empty:
                 pass  # No frame in queue during this cycle
+            except Exception as e:
+                print(f"[MANAGER]: _writer_loop encountered an error: {e}")
 
     def send_frame(self, frame: Frame) -> None:
         self.tx_queue.put(frame)

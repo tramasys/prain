@@ -55,12 +55,8 @@ class Detector:
             avg_r = int(np.mean(circles[:, 2]))
 
             img_center_x = output_img.shape[0] // 2
-            img_center_y = output_img.shape[1] // 2
             tolerance_x = 0.1 * output_img.shape[0]
-            tolerance_y = 0.5 * output_img.shape[1]
             if abs(avg_x - img_center_x) > tolerance_x:
-                return output_img, False, 0
-            if abs(avg_y - img_center_y) > tolerance_y:
                 return output_img, False, 0
 
             node_detected = True

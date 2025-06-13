@@ -105,6 +105,8 @@ class PathPlanner:
                 return None, self.current_node
 
             case NavState.ARRIVED_AT_NODE:
+                time.sleep(2)
+                
                 img = self.capture_img()
                 if img is None:
                     self.logger.warning("[PLANNER] No image captured.")
@@ -155,7 +157,6 @@ class PathPlanner:
                 if not self.angles:
                     self.state = NavState.BLOCKED
                     return encode_stop(Address.MOTION_CTRL), self.current_node
-
                 
                 angle_choice = self._choose_best_direction(self.angles)
                 if angle_choice is None:
@@ -340,13 +341,21 @@ class PathPlanner:
         self.uart_manager.send_frame(frame)                                
         time.sleep(1)
         
-    def move(self, distance: int) -> None:
+    def move(self, distance: int) -> bool:
         """
         Moves the robot forward by the specified distance.
         """
-        frame = encode_move(Address.MOTION_CTRL, distance)
-        self.uart_manager.send_frame(frame)
-        time.sleep(5)
+        try:
+            frame = encode_move(Address.MOTION_CTRL, distance)
+            self.uart_manager.send_frame(frame)
+            time.sleep(5)
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to move robot: {e}")
+            return False
+
+            
+        
         
     def reverse(self, distance: int) -> None:
         """
@@ -385,8 +394,8 @@ class PathPlanner:
         """
         Captures the current best node image and saves it.
         """
-        self.reverse(distance)
+        moved_back = self.move(-350)
         img = self.camera.capture_img()
-        self.move(distance)
+        moved_forward = self.move(350)
         self.save_img(img)
         return img
