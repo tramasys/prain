@@ -87,9 +87,16 @@ class CameraSource(VideoSource):
         self.__camera.post_callback = self.__frame_callback
         self.__camera.start()
         self.__log.info("PiCamera2 started.")
-        if not self.__wait_for_startup():
-            self.stop()
-            raise RuntimeError("Camera failed to deliver frame in time.")
+        if self.__wait_for_startup():
+            time.sleep(0.5)
+            try:
+                self.__camera.set_controls({"AfMode": 1, "AfTrigger": 0})
+                self.__log.info("Autofokus ausgelöst (AfMode=1, AfTrigger=0)")
+            except Exception as e:
+                self.__log.warning(f"Autofokus-Initialisierung fehlgeschlagen: {e}")
+            return
+        self.stop()
+        raise RuntimeError("Camera failed to deliver frame in time.")
 
     def get_next_frame(self):
         with self.__frame_lock:
