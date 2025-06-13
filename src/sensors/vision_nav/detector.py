@@ -12,6 +12,7 @@ class Detector:
     def get_edges(self):
         self.__frame = cv2.cvtColor(self.__frame, cv2.COLOR_BGR2HSV)
         self.__frame, node_detected, circle_count = self.__detect_node()
+        circle_count = circle_count if node_detected else 0
         
         if node_detected:
             Detector.frame_count_since_last_node = 0

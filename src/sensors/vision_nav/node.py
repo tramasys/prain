@@ -32,12 +32,20 @@ class Node:
         if not self.__node_captures:
             return None
 
+        # Filter for valid (circle-detected) captures
         valid_captures = [c for c in self.__node_captures if c[1] > 0]
         if not valid_captures:
             return None
 
-        avg_intensity = np.mean([c[1] for c in valid_captures])
-        best = min(valid_captures, key=lambda c: abs(c[1] - avg_intensity))
+        # Use the latest 50% of them
+        n = max(1, len(valid_captures) // 2)
+        recent_captures = valid_captures[-n:]
+
+        # Compute the average circle count in this slice
+        avg_intensity = np.mean([c[1] for c in recent_captures])
+
+        # Pick the frame closest to that average
+        best = min(recent_captures, key=lambda c: abs(c[1] - avg_intensity))
         return best
     
     def __str__(self):
