@@ -16,6 +16,7 @@ from comms.goal_sound import PWMBuzzer
 from comms.manager import UartManager
 from sensors.lidar import LidarSensor
 from sensors.vision_nav.visionnavigator import VisionNavigator
+from queue import Empty
 
 class NavState(Enum):
     TRAVELING_EDGE      = 1
@@ -333,37 +334,34 @@ class PathPlanner:
         self.logger.info(f"[PLANNER] Goal node {self.target_node} not reached yet. Continue navigating...")
         return False
     
-    def turn(self, angle: int) -> None:
+    def turn(self, angle: int) -> bool:
         """
-        Turns the robot by the specified angle.
+        Dreht den Roboter und wartet auf den Abschluss der Bewegung.
         """
-        frame = encode_turn(Address.MOTION_CTRL, angle)
-        self.uart_manager.send_frame(frame)                                
-        time.sleep(1)
-        
+        self.logger.info(f"Sende TURN-Befehl ({angle} Zehntelgrad).")
+        try:
+            frame = encode_turn(Address.MOTION_CTRL, angle)
+            self.uart_manager.send_frame(frame)
+            # KORREKT: Warte auf TURN_DONE Bestätigung
+            return self.await_acknowledgement(InfoFlag.TURN_DONE)
+        except Exception as e:
+            self.logger.error(f"Fehler beim Senden des TURN-Befehls: {e}")
+            return False
+
     def move(self, distance: int) -> bool:
         """
-        Moves the robot forward by the specified distance.
+        Bewegt den Roboter und wartet auf den Abschluss der Bewegung.
         """
+        # DIESES LOGGING HAT GEFEHLT:
+        self.logger.info(f"Sende MOVE-Befehl ({distance} mm).")
         try:
             frame = encode_move(Address.MOTION_CTRL, distance)
             self.uart_manager.send_frame(frame)
-            time.sleep(5)
-            return True
+            # KORREKT: Warte auf MOTION_DONE Bestätigung statt time.sleep()
+            return self.await_acknowledgement(InfoFlag.MOTION_DONE)
         except Exception as e:
-            self.logger.error(f"Failed to move robot: {e}")
+            self.logger.error(f"Fehler beim Senden des MOVE-Befehls: {e}")
             return False
-
-            
-        
-        
-    def reverse(self, distance: int) -> None:
-        """
-        Reverses the robot by the specified distance.
-        """
-        frame = encode_reverse(Address.MOTION_CTRL, distance)
-        self.uart_manager.send_frame(frame)
-        time.sleep(5)
 
     @property
     def current_graph(self) -> nx.Graph:
@@ -399,3 +397,33 @@ class PathPlanner:
         moved_forward = self.move(350)
         self.save_img(img)
         return img
+    
+    def await_acknowledgement(self, timeout: float = 10.0) -> bool:
+        start_time = time.time()
+
+        while time.time() - start_time < timeout:
+            try:
+                inbound_frame = self.uart_manager.rx_queue.get_nowait()
+                
+                try:
+                    decoder = Decoder(inbound_frame)
+                    if decoder.command == Command.INFO:
+                        params = decoder.get_params()
+
+                        if isinstance(params, InfoParams) and params.flag == InfoFlag.ACK:
+                            return True
+                        else:
+                            self.logger.debug(f"Received INFO frame, but not the one we're waiting for. Got: {params.flag.name}")
+
+                except Exception as e:
+                    self.logger.error(f"Error decoding incoming frame while waiting for ack: {e}")
+
+            except Empty:
+                time.sleep(0.05)
+                continue
+            except Exception as e:
+                self.logger.error(f"Error while waiting for acknowledgement: {e}")
+                return False
+
+        self.logger.warning(f"Timeout! Did not receive '{InfoFlag.ACK.name}' within {timeout} seconds.")
+        return False
