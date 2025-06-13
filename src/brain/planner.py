@@ -15,6 +15,7 @@ from sensors.vision_nav.letter_ocr import detect_letter
 from comms.goal_sound import PWMBuzzer
 from comms.manager import UartManager
 from sensors.lidar import LidarSensor
+from sensors.vision_nav.visionnavigator import VisionNavigator
 
 class NavState(Enum):
     TRAVELING_EDGE      = 1
@@ -33,6 +34,7 @@ class PathPlanner:
         logger: logging.Logger,
         manager: UartManager | None = None,
         lidar: LidarSensor | None = None,
+        camera: VisionNavigator | None = None,
         debug: bool=False
     ):
 
@@ -62,6 +64,7 @@ class PathPlanner:
 
         self.uart_manager = manager
         self.lidar = lidar
+        self.camera = camera
 
         # Scoring constants
         self.SECTION_BOOST = 3
@@ -102,10 +105,17 @@ class PathPlanner:
                 return None, self.current_node
 
             case NavState.ARRIVED_AT_NODE:
-                if self.best_node_image is None:
-                    self.logger.warning("[PLANNER] Waiting for best node image to arrive")
-                    time.sleep(0.5)
+                img = self.capture_img()
+                if img is None:
+                    self.logger.warning("[PLANNER] No image captured.")
                     return None, self.current_node
+                
+                # Goal-Check
+                if self.goal_reached(img):
+                    self.state = NavState.GOAL_REACHED
+                    self.buzzer.play_goal()
+                    self.logger.info("[PLANNER] Goal reached")
+                    return encode_stop(Address.MOTION_CTRL), self.current_node
                 
                 self.logger.info("[PLANNER] ARRIVED_AT_NODE reached")
 
@@ -133,13 +143,6 @@ class PathPlanner:
                 prev = self.node_stack[-1]
                 self.nxgraph.add_edge(prev, new_node, weight=self.last_travelled_distance)
                 self.logger.debug(f"[PLANNER] Added edge {prev}→{new_node} ({self.last_travelled_distance} mm)")
-
-                # Goal-Check
-                if self.goal_reached():
-                    self.state = NavState.GOAL_REACHED
-                    self.buzzer.play_goal()
-                    self.logger.info("[PLANNER] Goal reached")
-                    return encode_stop(Address.MOTION_CTRL), self.current_node
 
                 # Stack & weiter zum Angle-Deciding
                 self.node_stack.append(new_node)
@@ -305,23 +308,23 @@ class PathPlanner:
     def _handle_info(self, params: InfoParams):
         if params.flag == InfoFlag.NODE_DETECTED:
             self.logger.info(f'[PLANNER] Node detected from Motion Controller')
+        if params.flag == InfoFlag.MOTION_DONE:
+            self.logger.info(f'[PLANNER] Motion done from Motion Controller')
 
     def _generate_new_id(self) -> str:
         node_id = f"n{self.node_id_counter}"
         self.node_id_counter += 1
         return node_id
     
-    def goal_reached(self) -> bool:
+    def goal_reached(self, img) -> bool:
         """
         Returns True if the target node has been reached.
         """
         if self.best_node_image is None:
             return False
         
-        self.save_best_node_image()
-        
         self.logger.debug(f"[PLANNER] Checking if goal node {self.target_node} is reached...")
-        letter, _ = detect_letter(self.best_node_image)
+        letter, _ = detect_letter(img)
         self.logger.debug(f"[PLANNER] Detected letter: {letter}")
         if letter == self.target_node:
             self.logger.info(f"[PLANNER] Goal node {self.target_node} reached with letter {letter} at position {self.current_position}")
@@ -336,6 +339,22 @@ class PathPlanner:
         frame = encode_turn(Address.MOTION_CTRL, angle)
         self.uart_manager.send_frame(frame)                                
         time.sleep(1)
+        
+    def move(self, distance: int) -> None:
+        """
+        Moves the robot forward by the specified distance.
+        """
+        frame = encode_move(Address.MOTION_CTRL, distance)
+        self.uart_manager.send_frame(frame)
+        time.sleep(5)
+        
+    def reverse(self, distance: int) -> None:
+        """
+        Reverses the robot by the specified distance.
+        """
+        frame = encode_reverse(Address.MOTION_CTRL, distance)
+        self.uart_manager.send_frame(frame)
+        time.sleep(5)
 
     @property
     def current_graph(self) -> nx.Graph:
@@ -345,27 +364,29 @@ class PathPlanner:
     def current_positions(self) -> dict:
         return self.node_positions
 
-    def save_best_node_image(self, directory="images") -> str | None:
+    def save_img(self, img, directory="images") -> str | None:
         """
-        Saves the current best_node_image to the relative 'images/' directory.
-        Returns the filename if successful, or None otherwise.
+        Saves the given image to the specified directory with a unique filename.
+        Returns the path to the saved image or None if saving failed.
         """
-        if self.best_node_image is None:
-            self.logger.warning("[PLANNER] Tried to save image, but best_node_image is None.")
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
+        filename = f"{directory}/node_{self.current_node}_{uuid.uuid4()}.png"
+        try:
+            cv2.imwrite(filename, img)
+            self.logger.info(f"Image saved as {filename}")
+            return filename
+        except Exception as e:
+            self.logger.error(f"Failed to save image: {e}")
             return None
 
-        # Ensure relative directory exists
-        os.makedirs(directory, exist_ok=True)
-
-        filename = f"best_node_image_{self.current_node}_{uuid.uuid4().hex[:6]}.jpg"
-        full_path = os.path.join(directory, filename)
-
-        success = cv2.imwrite(full_path, self.best_node_image)
-        if success:
-            self.logger.info(f"[PLANNER] Saved best node image as {full_path}")
-            return full_path
-        else:
-            self.logger.error(f"[PLANNER] Failed to save best node image to {full_path}")
-            return None
-
-
+    def capture_img(self, distance: int = 350) -> np.ndarray | None:
+        """
+        Captures the current best node image and saves it.
+        """
+        self.reverse(distance)
+        img = self.camera.capture_img()
+        self.move(distance)
+        self.save_img(img)
+        return img

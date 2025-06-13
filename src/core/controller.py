@@ -27,6 +27,7 @@ class HighLevelController:
             logger=logger,
             manager=self.uart_manager,
             lidar=self.lidar,
+            camera=self.camera,
         )
 
         self.logger = logger

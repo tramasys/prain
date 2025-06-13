@@ -268,3 +268,17 @@ class VisionNavigator:
     
     def __set_goal_node_detected(self):
         self.__goal_node_detected = True
+        
+    def capture_img(self):
+        """Capture a single image from the video source."""
+        if not self.__running:
+            self.__log.warning("Cannot capture image: VisionNavigator is not running.")
+            return None
+        
+        frame_lores = self.__video_source.get_next_frame()
+        if frame_lores is None:
+            self.__log.warning("No valid frame captured.")
+            return None
+        
+        # Optionally, you can process the frame here if needed
+        return frame_lores.copy()
