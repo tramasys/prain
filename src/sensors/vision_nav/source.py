@@ -86,7 +86,7 @@ class CameraSource(VideoSource):
     def start(self):
         self.__camera.post_callback = self.__frame_callback
         self.__camera.start()
-        self.__log.info("PiCamera2 started.")
+        self.__log.info("PiCamera2 started. test")
         if self.__wait_for_startup():
             time.sleep(0.5)
             try:
