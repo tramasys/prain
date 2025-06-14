@@ -106,8 +106,6 @@ class PathPlanner:
                 return None, self.current_node
 
             case NavState.ARRIVED_AT_NODE:
-                time.sleep(2)
-                
                 img = self.capture_img()
                 if img is None:
                     self.logger.warning("[PLANNER] No image captured.")
@@ -342,8 +340,9 @@ class PathPlanner:
         try:
             frame = encode_turn(Address.MOTION_CTRL, angle)
             self.uart_manager.send_frame(frame)
+            time.sleep(1.5)
             # KORREKT: Warte auf TURN_DONE Bestätigung
-            return self.await_acknowledgement(InfoFlag.TURN_DONE)
+            return True
         except Exception as e:
             self.logger.error(f"Fehler beim Senden des TURN-Befehls: {e}")
             return False
@@ -358,7 +357,7 @@ class PathPlanner:
             frame = encode_move(Address.MOTION_CTRL, distance)
             self.uart_manager.send_frame(frame)
             # KORREKT: Warte auf MOTION_DONE Bestätigung statt time.sleep()
-            return self.await_acknowledgement(InfoFlag.MOTION_DONE)
+            return self.await_acknowledgement()
         except Exception as e:
             self.logger.error(f"Fehler beim Senden des MOVE-Befehls: {e}")
             return False
@@ -398,7 +397,7 @@ class PathPlanner:
         self.save_img(img)
         return img
     
-    def await_acknowledgement(self, timeout: float = 10.0) -> bool:
+    def await_acknowledgement(self, timeout: float = 7.0) -> bool:
         start_time = time.time()
 
         while time.time() - start_time < timeout:
@@ -413,7 +412,7 @@ class PathPlanner:
                         if isinstance(params, InfoParams) and params.flag == InfoFlag.ACK:
                             return True
                         else:
-                            self.logger.debug(f"Received INFO frame, but not the one we're waiting for. Got: {params.flag.name}")
+                            self.logger.debug(f"Received INFO frame, but not the one we're waiting for.")
 
                 except Exception as e:
                     self.logger.error(f"Error decoding incoming frame while waiting for ack: {e}")
@@ -425,5 +424,5 @@ class PathPlanner:
                 self.logger.error(f"Error while waiting for acknowledgement: {e}")
                 return False
 
-        self.logger.warning(f"Timeout! Did not receive '{InfoFlag.ACK.name}' within {timeout} seconds.")
+        self.logger.warning(f"Timeout! Did not receive 'InfoFlag.ACK' within {timeout} seconds.")
         return False
