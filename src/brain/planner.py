@@ -106,6 +106,7 @@ class PathPlanner:
                 return None, self.current_node
 
             case NavState.ARRIVED_AT_NODE:
+                time.sleep(2.5)
                 img = self.capture_img()
                 if img is None:
                     self.logger.warning("[PLANNER] No image captured.")
@@ -177,15 +178,13 @@ class PathPlanner:
             case NavState.CHECK_NEXT_ANGLE:                
                 self.logger.info(f"DIST: {dist_cm} cm, last angle: {self.last_chosen_angle}")
                 
-                time.sleep(1)
-                
                 sweep_dic = {
-                    "1": ( "-100", False),
-                    "2": ( "50", False),
-                    "3": ( "50", False),
-                    "4": ( "50", False),
-                    "5": ( "50", False),
-                    "6": ( "-100", False)
+                    "1": ( "-40", False),
+                    "2": ( "20", False),
+                    "3": ( "20", False),
+                    "4": ( "20", False),
+                    "5": ( "20", False),
+                    "6": ( "-40", False)
                 }
                 
                 rel_turn = 0
@@ -194,13 +193,18 @@ class PathPlanner:
                     turn_amount = int(angle)
                     self.logger.info(f"TURN {turn_amount}")
                     rel_turn += turn_amount
-                    self.turn(turn_amount)
+                    ack_received = self.turn(turn_amount, 0.7)
+                    if not ack_received:
+                        self.logger.warning(f"[PLANNER] Turn {turn_amount}° not acknowledged")
                     dist, fl, _ = self.lidar.get_data()
+                    self.logger.info(f"[PLANNER] Lidar data after turn {sweep_id}: dist={dist} mm, flux={fl}")
                 
                     if dist >= 45 and dist <= 205 and fl > 2000:
-                        self.turn(-rel_turn)
+                        self.turn(-rel_turn, 2)
                         self.logger.info("PYLON ALERT!!!!!")
-                        self.angles.remove(self.last_chosen_angle)
+                        if self.last_chosen_angle in self.angles:
+                            self.angles.remove(self.last_chosen_angle)
+                        self.last_chosen_angle = None
                         self.state = NavState.DECIDING_NEXT_ANGLE
                         return encode_turn(Address.MOTION_CTRL, -self.last_turn_amount), self.current_node
                 
@@ -332,7 +336,7 @@ class PathPlanner:
         self.logger.info(f"[PLANNER] Goal node {self.target_node} not reached yet. Continue navigating...")
         return False
     
-    def turn(self, angle: int) -> bool:
+    def turn(self, angle: int, timeout: float) -> bool:
         """
         Dreht den Roboter und wartet auf den Abschluss der Bewegung.
         """
@@ -341,23 +345,23 @@ class PathPlanner:
             self.uart_manager.clear_ack_queue()
             frame = encode_turn(Address.MOTION_CTRL, angle)
             self.uart_manager.send_frame(frame)
+            time.sleep(timeout)
             # KORREKT: Warte auf TURN_DONE Bestätigung
             return self.await_acknowledgement()
         except Exception as e:
             self.logger.error(f"Fehler beim Senden des TURN-Befehls: {e}")
             return False
 
-    def move(self, distance: int) -> bool:
+    def move(self, distance: int, timeout: float) -> bool:
         """
         Bewegt den Roboter und wartet auf den Abschluss der Bewegung.
         """
-        # DIESES LOGGING HAT GEFEHLT:
         self.logger.info(f"Sende MOVE-Befehl ({distance} mm).")
         try:
             self.uart_manager.clear_ack_queue()
             frame = encode_move(Address.MOTION_CTRL, distance)
             self.uart_manager.send_frame(frame)
-            # KORREKT: Warte auf MOTION_DONE Bestätigung statt time.sleep()
+            time.sleep(timeout)
             return self.await_acknowledgement()
         except Exception as e:
             self.logger.error(f"Fehler beim Senden des MOVE-Befehls: {e}")
@@ -388,13 +392,15 @@ class PathPlanner:
             self.logger.error(f"Failed to save image: {e}")
             return None
 
-    def capture_img(self, distance: int = 350) -> np.ndarray | None:
+    def capture_img(self, distance: int = 320) -> np.ndarray | None:
         """
         Captures the current best node image and saves it.
         """
-        moved_back = self.move(-350)
+        self.logger.info(f"[PLANNER] Ich werde JETZT move({distance}) aufrufen!")
+
+        moved_back = self.move(-distance, 4.0)
         img = self.camera.capture_img()
-        moved_forward = self.move(350)
+        moved_forward = self.move(distance, 4.0)
         self.save_img(img)
         return img
     

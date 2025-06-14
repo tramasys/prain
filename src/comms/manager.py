@@ -1,10 +1,11 @@
 import threading
 from queue import Queue, Empty
 from typing import Optional
+import time
 
-from .uart import UartInterface
+from comms.uart import UartInterface
 from utils.helper import frame_debug
-from prain_uart import *
+from prain_uart import Frame, Decoder, Command, InfoFlag
 
 class UartManager:
     def __init__(self, port: str, baudrate: int = 115200):
@@ -37,10 +38,13 @@ class UartManager:
                     try:
                         decoder = Decoder(frame)
                         params = decoder.get_params()
-                        if decoder.command == Command.INFO and hasattr(params, 'flag') and params.flag == InfoFlag.ACK:
+                        print(f"[MANAGER]: DEBUG!!!!!!!!!!!!!!!!! {params}")
+                        frame_debug(frame)
+                        if decoder.command == Command.INFO and params.flag == InfoFlag.ACK.value:
                             self.ack_queue.put(frame)
                             print(f"[MANAGER]: ACK frame routed to ack_queue.")
                         else:
+                            print(f"[MANAGER]: Frame received with command: {decoder.command.name}")
                             self.rx_queue.put(frame)
                     except Exception as e:
                         print(f"[MANAGER]: Error while sorting frame, putting in default queue: {e}")
@@ -52,18 +56,19 @@ class UartManager:
             except Exception as e:
                 print(f"[MANAGER]: _reader_loop encountered an error: {e}")
 
-    def _writer_loop(self) -> None:
-        while not self._stop_event.is_set():
+    def _writer_loop(self):
+        while not self._stop_event.is_set() or not self.tx_queue.empty():
             try:
-                frame = self.tx_queue.get(timeout=0.1)
+                frame = self.tx_queue.get(timeout=0.05)
                 self._uart.send_frame(frame)
                 print(f"[MANAGER]: _writer_loop sent frame!")
                 frame_debug(frame)
-
             except Empty:
-                pass  # No frame in queue during this cycle
+                continue
             except Exception as e:
                 print(f"[MANAGER]: _writer_loop encountered an error: {e}")
+
+
 
     def send_frame(self, frame: Frame) -> None:
         self.tx_queue.put(frame)
