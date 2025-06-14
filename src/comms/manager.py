@@ -75,3 +75,13 @@ class UartManager:
         if self._writer_thread is not None:
             self._writer_thread.join()
         self._uart.close()
+        
+    def clear_ack_queue(self) -> None:
+        """
+        Clears the ack queue.
+        """
+        while not self.ack_queue.empty():
+            try:
+                self.ack_queue.get_nowait()
+            except Empty:
+                break

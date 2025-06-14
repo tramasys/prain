@@ -338,6 +338,7 @@ class PathPlanner:
         """
         self.logger.info(f"Sende TURN-Befehl ({angle} Zehntelgrad).")
         try:
+            self.uart_manager.clear_ack_queue()
             frame = encode_turn(Address.MOTION_CTRL, angle)
             self.uart_manager.send_frame(frame)
             # KORREKT: Warte auf TURN_DONE Bestätigung
@@ -353,6 +354,7 @@ class PathPlanner:
         # DIESES LOGGING HAT GEFEHLT:
         self.logger.info(f"Sende MOVE-Befehl ({distance} mm).")
         try:
+            self.uart_manager.clear_ack_queue()
             frame = encode_move(Address.MOTION_CTRL, distance)
             self.uart_manager.send_frame(frame)
             # KORREKT: Warte auf MOTION_DONE Bestätigung statt time.sleep()
