@@ -13,6 +13,7 @@ class UartManager:
 
         self.rx_queue: Queue[Frame] = Queue()
         self.tx_queue: Queue[Frame] = Queue()
+        self.ack_queue: Queue[Frame] = Queue()
 
         self._reader_thread: Optional[threading.Thread] = None
         self._writer_thread: Optional[threading.Thread] = None
@@ -25,13 +26,31 @@ class UartManager:
         self._writer_thread.start()
 
     def _reader_loop(self) -> None:
+        """
+        Reads frames from UART and puts them into the appropriate queue.
+        This is our "mail sorter".
+        """
         while not self._stop_event.is_set():
-            #print("[MANAGER] _reader_loop attempting to read frame")
-            frame = self._uart.receive_frame()
-            if frame is not None:
-                print("[MANAGER] _reader_loop received frame!")
-                frame_debug(frame)
-                self.rx_queue.put(frame)
+            try:
+                frame = self._uart.receive_frame()
+                if frame:
+                    try:
+                        decoder = Decoder(frame)
+                        params = decoder.get_params()
+                        if decoder.command == Command.INFO and hasattr(params, 'flag') and params.flag == InfoFlag.ACK:
+                            self.ack_queue.put(frame)
+                            print(f"[MANAGER]: ACK frame routed to ack_queue.")
+                        else:
+                            self.rx_queue.put(frame)
+                    except Exception as e:
+                        print(f"[MANAGER]: Error while sorting frame, putting in default queue: {e}")
+                        self.rx_queue.put(frame)
+                    
+                    print(f"[MANAGER]: _reader_loop received frame!")
+                    frame_debug(frame)
+
+            except Exception as e:
+                print(f"[MANAGER]: _reader_loop encountered an error: {e}")
 
     def _writer_loop(self) -> None:
         while not self._stop_event.is_set():

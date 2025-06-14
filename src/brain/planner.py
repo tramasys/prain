@@ -340,9 +340,8 @@ class PathPlanner:
         try:
             frame = encode_turn(Address.MOTION_CTRL, angle)
             self.uart_manager.send_frame(frame)
-            time.sleep(1.5)
             # KORREKT: Warte auf TURN_DONE Bestätigung
-            return True
+            return self.await_acknowledgement()
         except Exception as e:
             self.logger.error(f"Fehler beim Senden des TURN-Befehls: {e}")
             return False
@@ -398,31 +397,26 @@ class PathPlanner:
         return img
     
     def await_acknowledgement(self, timeout: float = 7.0) -> bool:
+        """
+        Wartet auf einen Bestätigungs-Frame aus der dedizierten ack_queue.
+        Diese Version behandelt den Fall, dass das ACK bereits angekommen ist,
+        bevor das Warten beginnt.
+        """
+        self.logger.info(f"Warte auf Bestätigung: 'InfoFlag.ACK' (Timeout: {timeout}s)")
         start_time = time.time()
 
         while time.time() - start_time < timeout:
             try:
-                inbound_frame = self.uart_manager.rx_queue.get_nowait()
-                
-                try:
-                    decoder = Decoder(inbound_frame)
-                    if decoder.command == Command.INFO:
-                        params = decoder.get_params()
-
-                        if isinstance(params, InfoParams) and params.flag == InfoFlag.ACK:
-                            return True
-                        else:
-                            self.logger.debug(f"Received INFO frame, but not the one we're waiting for.")
-
-                except Exception as e:
-                    self.logger.error(f"Error decoding incoming frame while waiting for ack: {e}")
+                inbound_frame = self.uart_manager.ack_queue.get_nowait()
+                self.logger.info(f"Bestätigung 'InfoFlag.ACK' empfangen. Erfolg!")
+                return True
 
             except Empty:
                 time.sleep(0.05)
                 continue
             except Exception as e:
-                self.logger.error(f"Error while waiting for acknowledgement: {e}")
-                return False
+                self.logger.error(f"Unerwarteter Fehler beim Holen aus der ack_queue: {e}")
+                break 
 
-        self.logger.warning(f"Timeout! Did not receive 'InfoFlag.ACK' within {timeout} seconds.")
+        self.logger.warning(f"Timeout! 'InfoFlag.ACK' nicht innerhalb von {timeout} Sekunden empfangen.")
         return False
