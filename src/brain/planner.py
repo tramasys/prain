@@ -15,7 +15,7 @@ from sensors.vision_nav.letter_ocr import detect_letter
 from comms.goal_sound import PWMBuzzer
 from comms.manager import UartManager
 from sensors.lidar import LidarSensor
-from sensors.vision_nav.visionnavigator import VisionNavigator
+from sensors.vision_nav.visionnavigator import VisionNavigator, Node
 from queue import Empty
 
 class NavState(Enum):
@@ -97,10 +97,24 @@ class PathPlanner:
 
                 if self.angles and self.node_detected_signal:
                     self.state = NavState.ARRIVED_AT_NODE
+                # elif self.node_detected_signal:
+                #     img = self.capture_img()
+                #     node = Node()
+                #     _, edges, _ = self.camera.process_single_image(img)
+                #     node.extend_edge_candidates(edges)
+                #     angles = node.process()
+                #     if not angles:
+                #         self.state = NavState.BLOCKED
+                #         self.logger.warning("[PLANNER] No angles detected, blocked state reached")
+                #         return encode_stop(Address.MOTION_CTRL), self.current_node
+                #     self.angles = angles
+                #     self.state = NavState.ARRIVED_AT_NODE
+                #     self.logger.info(f"[PLANNER] Angles detected: {self.angles}")
 
                 return None, self.current_node
 
             case NavState.ARRIVED_AT_NODE:
+                time.sleep(0.5)
                 self.node_detected_signal = False
                 self.logger.info("[PLANNER] State: ARRIVED_AT_NODE")
 
@@ -277,6 +291,7 @@ class PathPlanner:
         
     def _process_inbound_data(self, inbound_data):
         for cmd, params in inbound_data:
+            print(f"[PLANNER] Processing inbound data: {cmd.name} with params: {params}")
             match cmd:
                 case Command.RESPONSE:
                     self._handle_response(params)
@@ -293,10 +308,10 @@ class PathPlanner:
             self.logger.warning(f"[PLANNER] RESPONSE ignored – unexpected poll_id: {params.poll_id}")
             
     def _handle_info(self, params: InfoParams):
-        if params.flag == InfoFlag.NODE_DETECTED:
+        if params.flag == InfoFlag.NODE_DETECTED.value:
             self.logger.info(f'[PLANNER] Node detected from Motion Controller')
             self.node_detected_signal = True
-        if params.flag == InfoFlag.MOTION_DONE:
+        if params.flag == InfoFlag.MOTION_DONE.value:
             self.logger.info(f'[PLANNER] Motion done from Motion Controller')
 
     def _generate_new_id(self) -> str:
@@ -379,7 +394,7 @@ class PathPlanner:
             self.logger.error(f"Failed to save image: {e}")
             return None
 
-    def capture_img(self, distance: int = 320) -> np.ndarray | None:
+    def capture_img(self, distance: int = 350) -> np.ndarray | None:
         """
         Captures the current best node image and saves it.
         """

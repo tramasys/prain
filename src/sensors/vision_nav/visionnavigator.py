@@ -293,4 +293,4 @@ class VisionNavigator:
         processed_frame, edges, circle_count = detector.get_edges()
         print(f"Edges detected: {edges}, Circle count: {circle_count}")
         
-        return processed_frame
+        return processed_frame, edges, circle_count
