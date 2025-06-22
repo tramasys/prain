@@ -26,7 +26,7 @@ class Detector:
 
     def __detect_node(self, blur_kernel=(5, 5)):
         _, _, v_channel = cv2.split(self.__frame)
-        blurred = cv2.GaussianBlur(v_channel, blur_kernel, 2)
+        blurred = cv2.GaussianBlur(v_channel, blur_kernel, 3)
 
         circles = cv2.HoughCircles(
             blurred,
@@ -84,8 +84,8 @@ class Detector:
         return np.array(filtered)
 
     def __extract_straight_sharp_edges(self, image, node_detected,
-                                       canny_threshold1=30, canny_threshold2=80,
-                                       hough_threshold=90, min_line_length=15, max_line_gap=40):
+                                       canny_threshold1=70, canny_threshold2=200,
+                                       hough_threshold=50, min_line_length=10, max_line_gap=10):
         if not node_detected:
             return image, []
 
@@ -109,7 +109,7 @@ class Detector:
         if len(lines.shape) == 1:
             lines = np.expand_dims(lines, axis=0)
 
-        lines = self.__filter_lines_near_border(lines, output_img.shape)
+        # lines = self.__filter_lines_near_border(lines, output_img.shape, tolerance=60)
         lines = self.__cluster_and_average_lines(lines)
         edges = [EdgeCandidate(line, center=output_img.shape[:2]) for line in lines]
 
