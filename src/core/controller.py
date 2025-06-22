@@ -49,7 +49,6 @@ class HighLevelController:
             sensor_data = {
                 "camera-angles": self.camera.get_data(),
                 "lidar": self.lidar.get_data(),
-                "best-node-image": self.camera.pop_best_node_image()
             }
 
             inbound_data = []
