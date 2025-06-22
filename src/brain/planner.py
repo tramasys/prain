@@ -61,7 +61,7 @@ class PathPlanner:
         self.nxgraph.add_node(self.current_node, position=self.current_position)
         self.node_id_counter = 1
         self.first_node_reached = False
-        self.best_node_image = None
+        self.node_detected_signal = False
 
         self.uart_manager = manager
         self.lidar = lidar
@@ -82,10 +82,6 @@ class PathPlanner:
         lidar = sensor_data.get("lidar", (None, None, None))
         dist_cm, flux, _ = lidar
         
-        best_node_image = sensor_data.get("best-node-image", None)
-        if best_node_image is not None:
-            self.best_node_image = best_node_image
-
         self.logger.info(f"[PLANNER] next_action called with persisted angles: {self.angles}, lidar: {lidar}")
         self._process_inbound_data(inbound_data)
 
@@ -99,55 +95,42 @@ class PathPlanner:
             case NavState.TRAVELING_EDGE:
                 self.logger.debug("[PLANNER] TRAVELING_EDGE state reached")
 
-                if self.angles:
+                if self.angles and self.node_detected_signal:
                     self.state = NavState.ARRIVED_AT_NODE
-                    return None, self.current_node
 
                 return None, self.current_node
 
             case NavState.ARRIVED_AT_NODE:
-                time.sleep(2.5)
-                img = self.capture_img()
+                self.node_detected_signal = False
+                self.logger.info("[PLANNER] State: ARRIVED_AT_NODE")
+
+                if not self.node_stack:
+                    self.node_stack.append("S")
+                    self.logger.info(f"[PLANNER] Arrived at START node 'S'.")
+                else:
+                    self._update_position()
+                    new_node = self._generate_new_id()
+                    prev = self.node_stack[-1]
+                    
+                    self.nxgraph.add_node(new_node, position=self.current_position)
+                    self.nxgraph.add_edge(prev, new_node, weight=self.last_travelled_distance)
+                    self.current_node = new_node
+                    self.node_stack.append(self.current_node)
+                    self.logger.info(f"[PLANNER] Arrived at NEW node '{self.current_node}'. Edge from '{prev}' added.")
+
+                self.logger.info(f"Node stack is now: {self.node_stack}")
+                
+                img = self.capture_img() 
                 if img is None:
                     self.logger.warning("[PLANNER] No image captured.")
                     return None, self.current_node
                 
-                # Goal-Check
                 if self.goal_reached(img):
                     self.state = NavState.GOAL_REACHED
                     self.buzzer.play_goal()
-                    self.logger.info("[PLANNER] Goal reached")
+                    self.logger.info(f"[PLANNER] Goal '{self.target_node}' reached at node '{self.current_node}'")
                     return encode_stop(Address.MOTION_CTRL), self.current_node
                 
-                self.logger.info("[PLANNER] ARRIVED_AT_NODE reached")
-
-                # --- 1) Entry-Stub: beim ersten Mal nur das Flag setzen und S in den Stack packen ---
-                if not self.first_node_reached:
-                    self.first_node_reached = True
-                    # Startknoten S bleibt bei (1732, 0)
-                    self.node_stack.append(self.current_node)
-                    self.logger.info("[PLANNER] Entry at S abgeschlossen – weiterhin in DECIDING_NEXT_ANGLE")
-                    self.state = NavState.DECIDING_NEXT_ANGLE
-                    return None, self.current_node
-
-                # --- 2) Ab jetzt: echte Position aktualisieren und neuen Knoten anlegen ---
-                # berechne new position
-                self._update_position()
-                self.logger.debug(f"[PLANNER] New position: {self.current_position}")
-
-                # neuen Knoten erzeugen
-                new_node = self._generate_new_id()
-                self.current_node = new_node
-                self.nxgraph.add_node(new_node, position=self.current_position)
-                self.logger.info(f"[PLANNER] Created node '{new_node}' at {self.current_position}")
-
-                # Edge vom vorherigen zum aktuellen Knoten
-                prev = self.node_stack[-1]
-                self.nxgraph.add_edge(prev, new_node, weight=self.last_travelled_distance)
-                self.logger.debug(f"[PLANNER] Added edge {prev}→{new_node} ({self.last_travelled_distance} mm)")
-
-                # Stack & weiter zum Angle-Deciding
-                self.node_stack.append(new_node)
                 self.state = NavState.DECIDING_NEXT_ANGLE
                 return None, self.current_node
 
@@ -312,6 +295,7 @@ class PathPlanner:
     def _handle_info(self, params: InfoParams):
         if params.flag == InfoFlag.NODE_DETECTED:
             self.logger.info(f'[PLANNER] Node detected from Motion Controller')
+            self.node_detected_signal = True
         if params.flag == InfoFlag.MOTION_DONE:
             self.logger.info(f'[PLANNER] Motion done from Motion Controller')
 
@@ -324,9 +308,6 @@ class PathPlanner:
         """
         Returns True if the target node has been reached.
         """
-        if self.best_node_image is None:
-            return False
-        
         self.logger.debug(f"[PLANNER] Checking if goal node {self.target_node} is reached...")
         letter, _ = detect_letter(img)
         self.logger.debug(f"[PLANNER] Detected letter: {letter}")
@@ -345,9 +326,12 @@ class PathPlanner:
             self.uart_manager.clear_ack_queue()
             frame = encode_turn(Address.MOTION_CTRL, angle)
             self.uart_manager.send_frame(frame)
-            time.sleep(timeout)
+            acknowledged = self.await_acknowledgement()
+            if acknowledged:
+                time.sleep(timeout)
+                return True
             # KORREKT: Warte auf TURN_DONE Bestätigung
-            return self.await_acknowledgement()
+            return False
         except Exception as e:
             self.logger.error(f"Fehler beim Senden des TURN-Befehls: {e}")
             return False
@@ -361,8 +345,11 @@ class PathPlanner:
             self.uart_manager.clear_ack_queue()
             frame = encode_move(Address.MOTION_CTRL, distance)
             self.uart_manager.send_frame(frame)
-            time.sleep(timeout)
-            return self.await_acknowledgement()
+            acknowledged = self.await_acknowledgement()
+            if acknowledged:
+                time.sleep(timeout)
+                return True
+            return False
         except Exception as e:
             self.logger.error(f"Fehler beim Senden des MOVE-Befehls: {e}")
             return False
