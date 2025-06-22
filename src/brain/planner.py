@@ -20,6 +20,8 @@ from queue import Empty
 
 class NavState(Enum):
     TRAVELING_EDGE      = 1
+    WAITING_FOR_ANGLES  = 2
+    RETRY_CAPTURE       = 9
     ARRIVED_AT_NODE     = 3
     DECIDING_NEXT_ANGLE = 4
     CHECK_NEXT_ANGLE    = 5
@@ -67,6 +69,11 @@ class PathPlanner:
         self.lidar = lidar
         self.camera = camera
 
+        self.wait_for_angles_start_time = None
+        self.wait_for_angles_timeout = 3.0
+        self.retry_attempt_count = 0
+        self.max_retry_attempts = 1
+        
         # Scoring constants
         self.SECTION_BOOST = 3
         self.WRONG_DIRECTION_PENALTY = 0.5
@@ -88,29 +95,77 @@ class PathPlanner:
         match self.state:
             
             case NavState.BEGIN:
-                self.logger.debug("[PLANNER] BEGIN state reached")
                 self.state = NavState.TRAVELING_EDGE
                 return encode_move(Address.MOTION_CTRL, 0), self.current_node
 
             case NavState.TRAVELING_EDGE:
-                self.logger.debug("[PLANNER] TRAVELING_EDGE state reached")
+                # Wenn der MotionController einen Knoten meldet...
+                if self.node_detected_signal:
+                    # ... und der VisionNavigator hat bereits Winkel gefunden -> Perfekt!
+                    if self.angles:
+                        self.logger.info(f"Node detected with angles: {self.angles}. Stopping and proceeding.")
+                        self.state = NavState.ARRIVED_AT_NODE
+                        return encode_stop(Address.MOTION_CTRL), self.current_node
+                    # ... aber es sind noch keine Winkel da -> Warten!
+                    else:
+                        self.logger.info("Node detected, but no angles yet. Starting wait timer...")
+                        self.state = NavState.WAITING_FOR_ANGLES
+                        self.wait_for_angles_start_time = time.time()
+                        self.retry_attempt_count = 0 # Zähler zurücksetzen
+                return None, self.current_node
 
-                if self.angles and self.node_detected_signal:
+            # <<< NEUER ZUSTAND: WARTEN >>>
+            case NavState.WAITING_FOR_ANGLES:
+                # Prüfen, ob in der Zwischenzeit Winkel angekommen sind
+                if self.angles:
+                    self.logger.info(f"Angles received: {self.angles}. Proceeding.")
                     self.state = NavState.ARRIVED_AT_NODE
-                # elif self.node_detected_signal:
-                #     img = self.capture_img()
-                #     node = Node()
-                #     _, edges, _ = self.camera.process_single_image(img)
-                #     node.extend_edge_candidates(edges)
-                #     angles = node.process()
-                #     if not angles:
-                #         self.state = NavState.BLOCKED
-                #         self.logger.warning("[PLANNER] No angles detected, blocked state reached")
-                #         return encode_stop(Address.MOTION_CTRL), self.current_node
-                #     self.angles = angles
-                #     self.state = NavState.ARRIVED_AT_NODE
-                #     self.logger.info(f"[PLANNER] Angles detected: {self.angles}")
+                    # Roboter wurde bereits beim Übergang von TRAVELING_EDGE gestoppt
+                    return None, self.current_node
 
+                # Prüfen, ob die Wartezeit abgelaufen ist
+                if time.time() - self.wait_for_angles_start_time > self.wait_for_angles_timeout:
+                    self.logger.warning("Timed out waiting for angles.")
+                    if self.retry_attempt_count < self.max_retry_attempts:
+                        self.retry_attempt_count += 1
+                        self.logger.info(f"Attempting retry #{self.retry_attempt_count}.")
+                        self.state = NavState.RETRY_CAPTURE
+                    else:
+                        self.logger.error("Maximum retry attempts reached. Entering BLOCKED state.")
+                        self.state = NavState.BLOCKED
+                        return encode_stop(Address.MOTION_CTRL), self.current_node
+                
+                # Wenn wir noch warten, nichts tun
+                return None, self.current_node
+
+            # <<< NEUER ZUSTAND: WIEDERHOLUNG >>>
+            case NavState.RETRY_CAPTURE:
+                self.logger.info("Performing retry sequence...")
+                # 1. Ein Stück zurückfahren für eine neue Perspektive
+                if not self.move(-200, 5.0): # 20cm zurück
+                    self.logger.error("Failed to move back for retry. Blocking.")
+                    self.state = NavState.BLOCKED
+                    return encode_stop(Address.MOTION_CTRL), self.current_node
+
+                # 2. Neues Bild aufnehmen und verarbeiten
+                new_angles = self._take_and_process_snapshot()
+                
+                # 3. Wieder an die ursprüngliche Position vorfahren
+                if not self.move(200, 5.0):
+                     self.logger.error("Failed to move forward after retry. Blocking.")
+                     self.state = NavState.BLOCKED
+                     return encode_stop(Address.MOTION_CTRL), self.current_node
+
+                # 4. Ergebnis auswerten
+                if new_angles:
+                    self.logger.info(f"Retry successful. New angles: {new_angles}")
+                    self.angles = new_angles
+                    self.state = NavState.ARRIVED_AT_NODE
+                else:
+                    self.logger.error("Retry failed to produce angles. Entering BLOCKED state.")
+                    self.state = NavState.BLOCKED
+                    return encode_stop(Address.MOTION_CTRL), self.current_node
+                
                 return None, self.current_node
 
             case NavState.ARRIVED_AT_NODE:
@@ -430,3 +485,31 @@ class PathPlanner:
 
         self.logger.warning(f"Timeout! 'InfoFlag.ACK' nicht innerhalb von {timeout} Sekunden empfangen.")
         return False
+    
+    def _take_and_process_snapshot(self) -> list[int]:
+        """
+        Nimmt ein einzelnes Bild auf und verarbeitet es, um Winkel zu finden.
+        Diese Funktion ist für den Wiederholungsversuch gedacht.
+        """
+        self.logger.info("Taking and processing a snapshot for angles...")
+        
+        # Wichtig: Wir verwenden hier die capture_img des VisionNavigators,
+        # die KEINE Roboterbewegung auslöst.
+        img = self.camera.capture_img()
+        if img is None:
+            self.logger.warning("Snapshot failed, no image captured.")
+            return None
+
+        if not self.camera or not self.camera.detector:
+            self.logger.error("Camera or Detector not available for snapshot processing.")
+            return None
+
+        # Wir verwenden die existierende Logik aus dem Detector, um Kanten zu finden
+        _, edges, _ = self.camera.process_single_image(img)
+        
+        node = Node()
+        node.extend_edge_candidates(edges)
+        angles = node.process()
+        
+        self.logger.info(f"Snapshot processed, detected angles: {angles}")
+        return angles
