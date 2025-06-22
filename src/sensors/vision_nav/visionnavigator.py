@@ -282,3 +282,15 @@ class VisionNavigator:
         
         # Optionally, you can process the frame here if needed
         return frame_lores.copy()
+    
+    def process_single_image(self, image):
+        """Process a single image and return the processed result."""
+        if not isinstance(image, np.ndarray):
+            self.__log.error("Input must be a numpy array.")
+            return None
+        
+        detector = Detector(image, debug=True)
+        processed_frame, edges, circle_count = detector.get_edges()
+        print(f"Edges detected: {edges}, Circle count: {circle_count}")
+        
+        return processed_frame
