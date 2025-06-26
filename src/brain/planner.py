@@ -307,8 +307,15 @@ class PathPlanner:
         distance = math.hypot(cx - tx, cy - ty)
 
         self.logger.debug(f"[PLANNER] Distance to target node {self.target_node}: {distance:.2f} mm")
+        
+        is_beyond = False
+        match self.target_node:
+            case "A": is_beyond = (cx >= tx and cy >= ty)
+            case "B": is_beyond = (tx - threshold <= cx <= tx + threshold and cy >= ty)
+            case _: is_beyond = (cx <= tx and cy >= ty)
 
-        return distance <= threshold
+        is_in_threshold = distance <= threshold
+        return is_in_threshold or is_beyond
 
         
     def _process_inbound_data(self, inbound_data):
