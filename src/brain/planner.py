@@ -8,6 +8,7 @@ import time
 import os
 import uuid
 import cv2
+import json
 
 from prain_uart import *
 from brain.graph import Graph
@@ -32,21 +33,19 @@ class NavState(Enum):
 class PathPlanner:
     def __init__(
         self,
-        graph: Graph,
         target_node: str,
-        logger: logging.Logger,
+        logger: logging.Logger = logging.Logger(__name__),
         manager: UartManager | None = None,
         lidar: LidarSensor | None = None,
         camera: VisionNavigator | None = None,
         debug: bool=False
     ):
 
-        self.graph = graph
-        self.nxgraph = nx.Graph()
-        self.node_stack = []
-        self.current_node = "S"
-        self.target_node = target_node
         self.logger = logger
+        self.nxgraph = self._load_graph_from_json('src/brain/graph_config/graph_data.json')
+        self.node_stack = []
+        self.current_node = None
+        self.target_node = target_node
         self.debug = debug
         self.buzzer = PWMBuzzer()
 
@@ -57,10 +56,13 @@ class PathPlanner:
         self.angles              = None
         self.last_chosen_angle   = None
         self.last_travelled_distance = 0
-        self.estimated_goal_coordinates = {"A": (3600, 2800), "B": (2000, 3600), "C": (800, 2800)} # in mm (x, y)
+        self.estimated_goal_coordinates = {
+            "A": (self.nxgraph.nodes["A"]["x"], self.nxgraph.nodes["A"]["y"]), 
+            "B": (self.nxgraph.nodes["B"]["x"], self.nxgraph.nodes["B"]["y"]), 
+            "C": (self.nxgraph.nodes["C"]["x"], self.nxgraph.nodes["C"]["y"])
+        } # in mm (x, y)
         self.target_node_coordinates = self.estimated_goal_coordinates[target_node]
-        self.current_position = (2000, 0) # S coordinates of S (x, y)
-        self.nxgraph.add_node(self.current_node, position=self.current_position)
+        self.current_position = (self.nxgraph.nodes["S"]["x"], self.nxgraph.nodes["S"]["y"]) # S coordinates of S (x, y)
         self.node_id_counter = 1
         self.first_node_reached = False
         self.node_detected_signal = False
@@ -142,35 +144,26 @@ class PathPlanner:
                 self.node_detected_signal = False
                 self.logger.info("[PLANNER] State: ARRIVED_AT_NODE")
 
-                if not self.node_stack:
+                if len(self.node_stack) == 0:
+                    # This should only happen at the very beginning
                     self.node_stack.append("S")
-                    self.logger.info(f"[PLANNER] Arrived at START node 'S'.")
+                    self.current_node = "S"
+                    self.logger.info("Initialized at START node 'S'.")
                 else:
-                    self._update_position()
-                    new_node = self._generate_new_id()
-                    prev = self.node_stack[-1]
+                    # We have arrived at a new node. Infer which one it is.
+                    self._infer_and_update_current_node()
                     
-                    self.nxgraph.add_node(new_node, position=self.current_position)
-                    self.nxgraph.add_edge(prev, new_node, weight=self.last_travelled_distance)
-                    self.current_node = new_node
-                    self.node_stack.append(self.current_node)
-                    self.logger.info(f"[PLANNER] Arrived at NEW node '{self.current_node}'. Edge from '{prev}' added.")
+                if self.state == NavState.BLOCKED:
+                    return encode_stop(Address.MOTION_CTRL), "UNKNOWN"
 
                 self.logger.info(f"Node stack is now: {self.node_stack}")
                 
-                required_drive_back = 5 if self.target_node == "B" else 4
-                img = None
-                if len(self.node_stack) >= required_drive_back:
-                    img = self.capture_img() 
-                    if img is None:
-                        self.logger.warning("[PLANNER] No image captured.")
-                        return None, self.current_node
-                
-                if (img is not None and self.goal_reached(img)) or self._is_close_to_target():
-                    self.state = NavState.GOAL_REACHED
-                    self.buzzer.play_goal()
-                    self.logger.info(f"[PLANNER] Goal '{self.target_node}' reached at node '{self.current_node}'")
-                    return encode_stop(Address.MOTION_CTRL), self.current_node
+                if self.current_node == self.target_node:
+                     img = self.capture_img()
+                     if self.goal_reached(img): # Double-check with OCR
+                         self.state = NavState.GOAL_REACHED
+                         self.buzzer.play_goal()
+                         return encode_stop(Address.MOTION_CTRL), self.current_node
                 
                 self.state = NavState.DECIDING_NEXT_ANGLE
                 return None, self.current_node
@@ -277,21 +270,21 @@ class PathPlanner:
     def _distance_to_target(self, pos):
         return math.sqrt((pos[0] - self.target_node_coordinates[0])**2 + (pos[1] - self.target_node_coordinates[1])**2)
 
-    def _choose_best_direction(self, detected_angles, step_length=500) -> int | None:
-        best_angle = None
-        min_distance = float('inf')
-        for angle in detected_angles:
-            orientation_adjusted_angle = int((angle + self.current_orientation) % 360)
-            new_pos = self._simulate_step_from(self.current_position, orientation_adjusted_angle, step_length)
-            dist = self._distance_to_target(new_pos)
-            self.logger.debug(f"[PLANNER] Angle {angle}° → Step to {new_pos} → Distance to goal: {dist:.2f} mm")
+    # def _choose_best_direction(self, detected_angles, step_length=500) -> int:
+    #     best_angle = None
+    #     min_distance = float('inf')
+    #     for angle in detected_angles:
+    #         orientation_adjusted_angle = int((angle + self.current_orientation) % 360)
+    #         new_pos = self._simulate_step_from(self.current_position, orientation_adjusted_angle, step_length)
+    #         dist = self._distance_to_target(new_pos)
+    #         self.logger.debug(f"[PLANNER] Angle {angle}° → Step to {new_pos} → Distance to goal: {dist:.2f} mm")
             
-            if dist < min_distance:
-                min_distance = dist
-                best_angle = angle
+    #         if dist < min_distance:
+    #             min_distance = dist
+    #             best_angle = angle
         
-        self.logger.info(f"[PLANNER] chosen angle: {best_angle}")
-        return best_angle
+    #     self.logger.info(f"[PLANNER] chosen angle: {best_angle}")
+    #     return best_angle
     
     def _update_orientation(self, angle_choice) -> int:
         self.current_orientation = int((self.current_orientation + angle_choice) % 360)
@@ -519,28 +512,140 @@ class PathPlanner:
         self.logger.info(f"Snapshot processed, detected angles: {angles}")
         return angles
     
-    def await_line_poll(self, timeout: float = 2.0) -> bool:
-        """
-        Wartet auf eine Antwort vom Line Sensor Poll.
-        Returns True if the robot is on a line, False otherwise.
-        """
-        self.logger.info(f"Warte auf Line Poll (Timeout: {timeout}s)")
-        start_time = time.time()
+    def _load_graph_from_json(self, file_path: str) -> nx.Graph:
+        """Loads the graph from the specified JSON file."""
+        # This function looks correct, but let's ensure coordinates are numeric.
+        try:
+            with open(file_path, 'r') as f:
+                data = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            self.logger.error(f"CRITICAL: Failed to load graph from {file_path}: {e}")
+            return nx.Graph()
 
-        while time.time() - start_time < timeout:
-            try:
-                inbound_frame = self.uart_manager.line_poll_queue.get_nowait()
-                decoder = Decoder(inbound_frame)
-                params = decoder.get_params()
-                if decoder.command == Command.RESPONSE and params.poll_id == PollId.LINE_SENSOR.value:
-                    self.logger.info("Line sensor poll received. Success!")
-                    return True
-            except Empty:
-                time.sleep(0.05)
-                continue
-            except Exception as e:
-                self.logger.error(f"Unerwarteter Fehler beim Holen aus der line_poll_queue: {e}")
-                break 
+        G = nx.Graph()
+        for node_id, attrs in data.get('nodes', {}).items():
+            # Ensure coordinates are numbers and apply any scaling factor if necessary
+            # Assuming your JSON has grid units and you want to work in mm
+            scale_factor = 400 
+            x = float(attrs.get('x', 0)) * scale_factor
+            y = float(attrs.get('y', 0)) * scale_factor
+            G.add_node(node_id, x=x, y=y)
 
-        self.logger.warning(f"Timeout! Line sensor poll nicht innerhalb von {timeout} Sekunden empfangen.")
-        return False
+        for edge in data.get('edges', []):
+            if 'from' in edge and 'to' in edge:
+                G.add_edge(edge['from'], edge['to'])
+        
+        self.logger.info(f"Graph loaded successfully with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges.")
+        return G
+
+    def get_node_coordinates(self, node_id: str):
+        # Greift auf die Daten zu, die im Graphen selbst gespeichert sind
+        return self.nxgraph.nodes[node_id]['x'], self.nxgraph.nodes[node_id]['y']
+    
+    def _infer_and_update_current_node(self, tolerance_degrees: float = 10.0):
+        """
+        Infers the current node based on the last known node and the travel angle.
+        This is the heart of the graph-based localization.
+        """
+        if not self.node_stack:
+            self.state = NavState.BLOCKED
+            self.logger.error("Cannot infer node, node stack is empty!")
+            return
+
+        previous_node_id = self.node_stack[-1]
+        prev_coords = self.nxgraph.nodes[previous_node_id]
+
+        # The absolute direction the robot was traveling in
+        travel_direction = self.current_orientation
+
+        best_match_node = None
+        smallest_angle_diff = float('inf')
+
+        for neighbor_id in self.nxgraph.neighbors(previous_node_id):
+            neighbor_coords = self.nxgraph.nodes[neighbor_id]
+
+            # Calculate the true world angle from the previous node to this neighbor
+            dx = neighbor_coords['x'] - prev_coords['x']
+            dy = neighbor_coords['y'] - prev_coords['y']
+            
+            # atan2(dy, dx) gives angle from +X axis (East). We convert to our system (0° is +Y).
+            expected_direction_rad = math.atan2(dy, dx)
+            expected_direction_deg = (450 - math.degrees(expected_direction_rad)) % 360
+
+            # Calculate the smallest difference between the robot's travel direction and the expected direction
+            diff = 180 - abs(abs(travel_direction - expected_direction_deg) - 180)
+
+            self.logger.debug(f"Inferring from '{previous_node_id}': Travel_dir={travel_direction:.1f}°. Neighbor '{neighbor_id}' expected_dir={expected_direction_deg:.1f}°. Diff={diff:.1f}°")
+
+            if diff < smallest_angle_diff:
+                smallest_angle_diff = diff
+                best_match_node = neighbor_id
+
+        if best_match_node and smallest_angle_diff <= tolerance_degrees:
+            self.current_node = best_match_node
+            self.node_stack.append(self.current_node)
+            self.logger.info(f"SUCCESS: Inferred arrival at node '{self.current_node}'. (Angle diff: {smallest_angle_diff:.1f}°)")
+        else:
+            self.state = NavState.BLOCKED
+            self.logger.error(f"FAILURE: Could not infer destination. Best match '{best_match_node}' was off by {smallest_angle_diff:.1f}°. Blocking.")
+            
+    def _choose_best_direction(self, detected_angles: list[int]) -> int | None:
+        """
+        Chooses the best camera angle by finding the shortest path on the graph
+        and matching the angle to the next node on that path.
+        """
+        # 1. Find the shortest path to the final target
+        try:
+            path = nx.shortest_path(self.nxgraph, source=self.current_node, target=self.target_node)
+            if len(path) < 2:
+                self.logger.warning(f"Already at target or no path found. Path: {path}")
+                return None
+            next_hop_node = path[1]
+            self.logger.info(f"Path to target: {path}. Next hop is '{next_hop_node}'.")
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
+            self.logger.error(f"No path found from '{self.current_node}' to '{self.target_node}'. Blocking.")
+            return None
+
+        # 2. Calculate the absolute world angle to the next hop node
+        current_coords = self.nxgraph.nodes[self.current_node]
+        next_hop_coords = self.nxgraph.nodes[next_hop_node]
+        dx = next_hop_coords['x'] - current_coords['x']
+        dy = next_hop_coords['y'] - current_coords['y']
+        
+        target_direction_rad = math.atan2(dy, dx)
+        absolute_target_angle = (450 - math.degrees(target_direction_rad)) % 360
+
+        # 3. Convert this to a relative angle for the robot
+        relative_target_angle = (absolute_target_angle - self.current_orientation) % 360
+
+        # 4. Find the detected camera angle that is closest to our ideal relative angle
+        best_angle_choice = None
+        smallest_diff = float('inf')
+        self.logger.debug(f"Robot at {self.current_orientation:.1f}°. Needs to face {absolute_target_angle:.1f}°. Relative turn needed: {relative_target_angle:.1f}°")
+
+        for angle in detected_angles:
+            diff = 180 - abs(abs(angle - relative_target_angle) - 180)
+            if diff < smallest_diff:
+                smallest_diff = diff
+                best_angle_choice = angle
+
+        if best_angle_choice is not None:
+             self.logger.info(f"Best camera angle for next hop is {best_angle_choice}° (diff to ideal: {smallest_diff:.1f}°)")
+        else:
+             self.logger.error("No angle found that matches path.")
+
+        return best_angle_choice
+    
+    def print_graph(self):
+        print("=== Graph Summary ===")
+        print(f"Nodes ({self.nxgraph.number_of_nodes()}):")
+        for node, data in self.nxgraph.nodes(data=True):
+            pos = f"x={data.get('x', '?')}, y={data.get('y', '?')}"
+            print(f"  {node}: {pos}")
+
+        print(f"\nEdges ({self.nxgraph.number_of_edges()}):")
+        for u, v in self.nxgraph.edges():
+            print(f"  {u} -- {v}")
+
+        
+        

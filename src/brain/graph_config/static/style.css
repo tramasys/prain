@@ -1,0 +1,92 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: sans-serif;
+  padding: 1rem;
+  background: #f8f9fa;
+}
+
+h1 {
+  margin-bottom: 1rem;
+}
+
+#clear-btn {
+  margin-bottom: 2rem;
+}
+
+/* KORREKTUR: Der Container ist nur der Anker.
+   Er hat selbst keine Grid-Eigenschaften.
+*/
+#container {
+  position: relative;
+  width: 400px;
+  height: 400px;
+  margin-top: 2rem;
+  margin-left: 2rem;
+}
+
+/* KORREKTUR: Das Gitter und das Overlay müssen BEIDE absolut
+   positioniert sein, damit sie exakt übereinanderliegen.
+*/
+#grid,
+#edge-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#grid {
+  display: grid;
+  z-index: 1; /* Gitter ist die unterste Ebene */
+}
+
+.tile {
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  position: relative;
+}
+
+.tile.node {
+  border-radius: 50%;
+  border: 2px solid black;
+  font-weight: bold;
+  background-color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* KORREKTUR: z-index und position, damit Knoten über den Kanten liegen */
+  position: relative;
+  z-index: 20;
+}
+
+.tile.y-label::before {
+  content: attr(data-y);
+  position: absolute;
+  left: -20px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.tile.x-label::after {
+  content: attr(data-x);
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+#edge-overlay {
+  pointer-events: none; /* Lässt Klicks zum Gitter durch */
+  z-index: 10; /* Kanten-Ebene liegt über dem Gitter (1) */
+}
+
+.edge {
+  background: rgba(0, 0, 0, 0.2);
+  height: 2px; /* Muss zur JS-Konstante passen */
+  /* KORREKTUR: Die Kante muss absolut positioniert werden */
+  position: absolute;
+  transform-origin: 0 0;
+}
