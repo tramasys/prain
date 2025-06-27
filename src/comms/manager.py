@@ -5,7 +5,7 @@ import time
 
 from comms.uart import UartInterface
 from utils.helper import frame_debug
-from prain_uart import Frame, Decoder, Command, InfoFlag
+from prain_uart import Frame, Decoder, Command, InfoFlag, PollId
 
 class UartManager:
     def __init__(self, port: str, baudrate: int = 115200):
@@ -15,6 +15,7 @@ class UartManager:
         self.rx_queue: Queue[Frame] = Queue()
         self.tx_queue: Queue[Frame] = Queue()
         self.ack_queue: Queue[Frame] = Queue()
+        self.line_poll_queue: Queue[Frame] = Queue()
 
         self._reader_thread: Optional[threading.Thread] = None
         self._writer_thread: Optional[threading.Thread] = None
@@ -38,11 +39,13 @@ class UartManager:
                     try:
                         decoder = Decoder(frame)
                         params = decoder.get_params()
-                        print(f"[MANAGER]: DEBUG!!!!!!!!!!!!!!!!! {params}")
-                        frame_debug(frame)
                         if decoder.command == Command.INFO and params.flag == InfoFlag.ACK.value:
                             self.ack_queue.put(frame)
                             print(f"[MANAGER]: ACK frame routed to ack_queue.")
+                        elif (decoder.command == Command.INFO and params.flag == InfoFlag.LOST_LINE.value) or \
+                            (decoder.command == Command.RESPONSE and params.poll_id == PollId.LINE_SENSOR.value):
+                            self.line_poll_queue.put(frame)
+                            print(f"[MANAGER]: Line poll frame routed to line_poll_queue.")
                         else:
                             print(f"[MANAGER]: Frame received with command: {decoder.command.name}")
                             self.rx_queue.put(frame)
@@ -88,5 +91,15 @@ class UartManager:
         while not self.ack_queue.empty():
             try:
                 self.ack_queue.get_nowait()
+            except Empty:
+                break
+            
+    def clear_line_poll_queue(self) -> None:
+        """
+        Clears the line poll queue.
+        """
+        while not self.line_poll_queue.empty():
+            try:
+                self.line_poll_queue.get_nowait()
             except Empty:
                 break
