@@ -57,13 +57,14 @@ class PathPlanner:
         self.angles              = None
         self.last_chosen_angle   = None
         self.last_travelled_distance = 0
-        self.estimated_goal_coordinates = {"A": (3118, 2700), "B": (1559, 3600), "C": (0, 2700)} # in mm (x, y)
+        self.estimated_goal_coordinates = {"A": (3600, 2800), "B": (2000, 3600), "C": (800, 2800)} # in mm (x, y)
         self.target_node_coordinates = self.estimated_goal_coordinates[target_node]
-        self.current_position = (1559, 0) # S coordinates of S (x, y)
+        self.current_position = (2000, 0) # S coordinates of S (x, y)
         self.nxgraph.add_node(self.current_node, position=self.current_position)
         self.node_id_counter = 1
         self.first_node_reached = False
         self.node_detected_signal = False
+        self.angles_locked = False
 
         self.uart_manager = manager
         self.lidar = lidar
@@ -81,8 +82,9 @@ class PathPlanner:
 
     def next_action(self, sensor_data: dict, inbound_data) -> tuple[Frame | None, str]:
         angles = sensor_data.get("camera-angles", [])
-        if angles:
+        if angles and not self.angles_locked:
             self.angles = angles
+            self.angles_locked = True
 
         lidar = sensor_data.get("lidar", (None, None, None))
         dist_cm, flux, _ = lidar
@@ -101,7 +103,7 @@ class PathPlanner:
                     if self.angles:
                         self.logger.info(f"Node detected with angles: {self.angles}. Stopping and proceeding.")
                         self.state = NavState.ARRIVED_AT_NODE
-                        return encode_stop(Address.MOTION_CTRL), self.current_node
+                        return None, self.current_node
                     else:
                         self.logger.info("Node detected, but no angles yet. Starting wait timer...")
                         self.state = NavState.WAITING_FOR_ANGLES
@@ -156,12 +158,15 @@ class PathPlanner:
 
                 self.logger.info(f"Node stack is now: {self.node_stack}")
                 
-                img = self.capture_img() 
-                if img is None:
-                    self.logger.warning("[PLANNER] No image captured.")
-                    return None, self.current_node
+                required_drive_back = 5 if self.target_node == "B" else 4
+                img = None
+                if len(self.node_stack) >= required_drive_back:
+                    img = self.capture_img() 
+                    if img is None:
+                        self.logger.warning("[PLANNER] No image captured.")
+                        return None, self.current_node
                 
-                if self.goal_reached(img):
+                if (img is not None and self.goal_reached(img)) or self._is_close_to_target():
                     self.state = NavState.GOAL_REACHED
                     self.buzzer.play_goal()
                     self.logger.info(f"[PLANNER] Goal '{self.target_node}' reached at node '{self.current_node}'")
@@ -195,6 +200,15 @@ class PathPlanner:
                 return encode_turn(Address.MOTION_CTRL, turn_amount), self.current_node
 
             case NavState.CHECK_NEXT_ANGLE:                
+                line_found = self.poll_line()
+                if not line_found:
+                    if self.last_chosen_angle in self.angles:
+                        self.angles.remove(self.last_chosen_angle)
+                    self.logger.info(f"[PLANNER] No line found after turning {self.last_chosen_angle}°")
+                    self.last_chosen_angle = None
+                    self.state = NavState.DECIDING_NEXT_ANGLE
+                    return encode_turn(Address.MOTION_CTRL, -self.last_turn_amount), self.current_node
+                
                 self.logger.info(f"DIST: {dist_cm} cm, last angle: {self.last_chosen_angle}")
                 
                 sweep_dic = {
@@ -212,7 +226,7 @@ class PathPlanner:
                     turn_amount = int(angle)
                     self.logger.info(f"TURN {turn_amount}")
                     rel_turn += turn_amount
-                    ack_received = self.turn(turn_amount, 0.7)
+                    ack_received = self.turn(turn_amount, 0.3)
                     if not ack_received:
                         self.logger.warning(f"[PLANNER] Turn {turn_amount}° not acknowledged")
                     dist, fl, _ = self.lidar.get_data()
@@ -230,6 +244,7 @@ class PathPlanner:
                 self.logger.info("[PLANNER] CHECK_NEXT_ANGLE state reached")
                 self.state = NavState.TRAVELING_EDGE
                 self.angles = None
+                self.angles_locked = False
                 return encode_move(Address.MOTION_CTRL, 0), self.current_node
 
             case NavState.GOAL_REACHED:
@@ -262,7 +277,7 @@ class PathPlanner:
     def _distance_to_target(self, pos):
         return math.sqrt((pos[0] - self.target_node_coordinates[0])**2 + (pos[1] - self.target_node_coordinates[1])**2)
 
-    def _choose_best_direction(self, detected_angles, step_length=500) -> int:
+    def _choose_best_direction(self, detected_angles, step_length=500) -> int | None:
         best_angle = None
         min_distance = float('inf')
         for angle in detected_angles:
@@ -307,8 +322,15 @@ class PathPlanner:
         distance = math.hypot(cx - tx, cy - ty)
 
         self.logger.debug(f"[PLANNER] Distance to target node {self.target_node}: {distance:.2f} mm")
+        
+        is_beyond = False
+        match self.target_node:
+            case "A": is_beyond = (cx >= tx and cy >= ty)
+            case "B": is_beyond = (tx - threshold <= cx <= tx + threshold and cy >= ty)
+            case _: is_beyond = (cx <= tx and cy >= ty)
 
-        return distance <= threshold
+        is_in_threshold = distance <= threshold
+        return is_in_threshold or is_beyond
 
         
     def _process_inbound_data(self, inbound_data):
@@ -387,6 +409,26 @@ class PathPlanner:
                 time.sleep(timeout)
                 return True
             return False
+        except Exception as e:
+            self.logger.error(f"Fehler beim Senden des MOVE-Befehls: {e}")
+            return False
+        
+    def poll_line(self, timeout: float = 2.0) -> bool:
+        """
+        Polls the line sensor to check if the robot is on a line.
+        Returns True if the robot is on a line, False otherwise.
+        """
+        try:
+            self.uart_manager.clear_line_poll_queue()
+            self.uart_manager.clear_ack_queue()
+            frame = encode_poll(Address.MOTION_CTRL, PollId.LINE_SENSOR)
+            self.uart_manager.send_frame(frame)
+            acknowledged = self.await_acknowledgement()
+            if not acknowledged:
+                return False
+            success = self.await_line_poll()
+            time.sleep(1)
+            return success
         except Exception as e:
             self.logger.error(f"Fehler beim Senden des MOVE-Befehls: {e}")
             return False
@@ -476,3 +518,29 @@ class PathPlanner:
         
         self.logger.info(f"Snapshot processed, detected angles: {angles}")
         return angles
+    
+    def await_line_poll(self, timeout: float = 2.0) -> bool:
+        """
+        Wartet auf eine Antwort vom Line Sensor Poll.
+        Returns True if the robot is on a line, False otherwise.
+        """
+        self.logger.info(f"Warte auf Line Poll (Timeout: {timeout}s)")
+        start_time = time.time()
+
+        while time.time() - start_time < timeout:
+            try:
+                inbound_frame = self.uart_manager.line_poll_queue.get_nowait()
+                decoder = Decoder(inbound_frame)
+                params = decoder.get_params()
+                if decoder.command == Command.RESPONSE and params.poll_id == PollId.LINE_SENSOR.value:
+                    self.logger.info("Line sensor poll received. Success!")
+                    return True
+            except Empty:
+                time.sleep(0.05)
+                continue
+            except Exception as e:
+                self.logger.error(f"Unerwarteter Fehler beim Holen aus der line_poll_queue: {e}")
+                break 
+
+        self.logger.warning(f"Timeout! Line sensor poll nicht innerhalb von {timeout} Sekunden empfangen.")
+        return False
