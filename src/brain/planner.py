@@ -162,8 +162,8 @@ class PathPlanner:
                 self.logger.info(f"PLANNER] Node stack is now: {self.node_stack}")
                 
                 if self.current_node == self.target_node:
-                    img = self.capture_img()
-                    self.goal_reached(img)
+                    # img = self.capture_img()
+                    # self.goal_reached(img)
                     self.state = NavState.GOAL_REACHED
                     self.buzzer.play_goal()
                     return encode_stop(Address.MOTION_CTRL), self.current_node
@@ -641,8 +641,9 @@ class PathPlanner:
         dx = next_hop_coords['x'] - current_coords['x']
         dy = next_hop_coords['y'] - current_coords['y']
         
-        target_direction_rad = math.atan2(dy, dx)
-        absolute_target_angle = (450 - math.degrees(target_direction_rad)) % 360
+        target_direction_rad = math.atan2(dx, dy)
+        absolute_target_angle = math.degrees(target_direction_rad) #(450 - math.degrees(target_direction_rad)) % 360
+        
 
         # 3. Convert this to a relative angle for the robot
         relative_target_angle = (absolute_target_angle - self.current_orientation) % 360
@@ -653,7 +654,7 @@ class PathPlanner:
         self.logger.debug(f"Robot at {self.current_orientation:.1f}°. Needs to face {absolute_target_angle:.1f}°. Relative turn needed: {relative_target_angle:.1f}°")
 
         for angle in detected_angles:
-            diff = 180 - abs(abs(angle - relative_target_angle) - 180)
+            diff = abs(angle - relative_target_angle)
             if diff < smallest_diff:
                 smallest_diff = diff
                 best_angle_choice = angle
