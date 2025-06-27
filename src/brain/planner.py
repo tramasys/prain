@@ -201,8 +201,10 @@ class PathPlanner:
                     if self.last_chosen_angle in self.angles:
                         self.angles.remove(self.last_chosen_angle)
                     self.logger.info(f"[PLANNER] No line found after turning {self.last_chosen_angle}°")
+                    self._update_orientation(-self.last_chosen_angle)
                     self.last_chosen_angle = None
                     self.state = NavState.DECIDING_NEXT_ANGLE
+
                     return encode_turn(Address.MOTION_CTRL, -self.last_turn_amount), self.current_node
                 
                 self.logger.info(f"DIST: {dist_cm} cm, last angle: {self.last_chosen_angle}")
@@ -233,8 +235,17 @@ class PathPlanner:
                         self.logger.info("PYLON ALERT!!!!!")
                         if self.last_chosen_angle in self.angles:
                             self.angles.remove(self.last_chosen_angle)
+                        try:
+                            next_node = self._infer_next_node()
+                            self.nxgraph.remove_node(next_node)
+                            print(self.nxgraph.nodes)
+                        except nx.NetworkXError as e:
+                            self.logger.error(e)
+                            
+                        self._update_orientation(-self.last_chosen_angle)
                         self.last_chosen_angle = None
                         self.state = NavState.DECIDING_NEXT_ANGLE
+
                         return encode_turn(Address.MOTION_CTRL, -self.last_turn_amount), self.current_node
                 
                 self.logger.info("[PLANNER] CHECK_NEXT_ANGLE state reached")
@@ -598,17 +609,21 @@ class PathPlanner:
             dy = neighbor_coords['y'] - prev_coords['y']
             
             # atan2(dy, dx) gives angle from +X axis (East). We convert to our system (0° is +Y).
-            expected_direction_rad = math.atan2(dx, dy)
-            expected_direction_deg = math.degrees(expected_direction_rad)
+            expected_direction_rad = math.atan2(dy, dx)
+            last_chosen_angle = self.last_chosen_angle if self.last_chosen_angle is not None else 0
+            expected_direction_deg = (90 - math.degrees(expected_direction_rad)) % 360
 
             # Calculate the smallest difference between the robot's travel direction and the expected direction
-            diff = abs(travel_direction - expected_direction_deg)
+            diff = abs(travel_direction - expected_direction_deg) % 360
 
             self.logger.debug(f"Inferring from '{previous_node_id}': Travel_dir={travel_direction:.1f}°. Neighbor '{neighbor_id}' expected_dir={expected_direction_deg:.1f}°. Diff={diff:.1f}°")
 
+            self.logger.debug(f"[DEBUG] Inferred angle for neighbor {neighbor_id}: {expected_direction_deg:.1f}° (dx={dx}, dy={dy})")
             if diff < smallest_angle_diff:
                 smallest_angle_diff = diff
                 best_match_node = neighbor_id
+                
+
 
         if best_match_node and smallest_angle_diff <= tolerance_degrees:
             self.current_node = best_match_node
@@ -618,12 +633,65 @@ class PathPlanner:
             self.state = NavState.BLOCKED
             self.logger.error(f"FAILURE: Could not infer destination. Best match '{best_match_node}' was off by {smallest_angle_diff:.1f}°. Blocking.")
             
+    def _infer_next_node(self, tolerance_degrees: float = 15.0):
+        """
+        Bestimmt den nächsten Knoten basierend auf dem gewählten Kamerawinkel und der aktuellen Ausrichtung.
+
+        Args:
+            last_chosen_angle (int): Der von der Kamera gewählte Winkel (in Grad), um zum nächsten Knoten zu fahren.
+            tolerance_degrees (float): Die maximale Winkeldifferenz, um einen Knoten als Übereinstimmung zu betrachten.
+
+        Returns:
+            str or None: Die ID des wahrscheinlichsten nächsten Knotens oder None, wenn keine Übereinstimmung gefunden wurde.
+        """
+        if not self.node_stack:
+            self.logger.error("Kann nächsten Knoten nicht bestimmen, node_stack ist leer!")
+            return None
+
+        previous_node_id = self.node_stack[-1]
+        prev_coords = self.nxgraph.nodes[previous_node_id]
+
+        best_match_node = None
+        smallest_angle_diff = float('inf')
+
+        # Die aktuelle absolute Ausrichtung des Roboters
+        robot_orientation = self.current_orientation
+
+        for neighbor_id in self.nxgraph.neighbors(previous_node_id):
+            neighbor_coords = self.nxgraph.nodes[neighbor_id]
+
+            # Berechnet die wahre Weltrichtung vom vorherigen zum benachbarten Knoten
+            dx = neighbor_coords['x'] - prev_coords['x']
+            dy = neighbor_coords['y'] - prev_coords['y']
+            
+            expected_direction_rad = math.atan2(dy, dx)
+            expected_direction_deg = (90 - math.degrees(expected_direction_rad)) % 360
+
+            # Der `last_chosen_angle` ist relativ zur Kamera (und damit zur Roboter-Ausrichtung).
+            # Wir müssen ihn in eine absolute Weltrichtung umrechnen.
+            # Annahme: last_chosen_angle = 0 bedeutet geradeaus in der aktuellen `robot_orientation`.
+            # Dies muss an Ihre Implementierung angepasst werden. Wenn `last_chosen_angle` bereits
+            # eine absolute Richtung ist, können Sie die Addition von `robot_orientation` entfernen.
+            absolute_chosen_direction = (robot_orientation - self.last_chosen_angle) % 360
+
+            # Berechnet die kleinste Differenz zwischen der gewählten Richtung und der erwarteten Richtung
+            diff = abs(robot_orientation - expected_direction_deg) % 360
+
+            if diff < smallest_angle_diff:
+                smallest_angle_diff = diff
+                best_match_node = neighbor_id
+
+        if best_match_node and smallest_angle_diff <= tolerance_degrees:
+            self.logger.info(f"Nächster Knoten als '{best_match_node}' mit einer Winkelabweichung von {smallest_angle_diff:.1f}° bestimmt.")
+            return best_match_node
+        else:
+            self.logger.warning(
+                f"Konnte nächsten Knoten nicht eindeutig bestimmen. Bester Treffer '{best_match_node}' "
+                f"hatte eine Abweichung von {smallest_angle_diff:.1f}°."
+            )
+            return None
+            
     def _choose_best_direction(self, detected_angles: list[int]) -> int | None:
-        """
-        Chooses the best camera angle by finding the shortest path on the graph
-        and matching the angle to the next node on that path.
-        """
-        # 1. Find the shortest path to the final target
         try:
             path = nx.shortest_path(self.nxgraph, source=self.current_node, target=self.target_node)
             if len(path) < 2:
@@ -635,36 +703,53 @@ class PathPlanner:
             self.logger.error(f"No path found from '{self.current_node}' to '{self.target_node}'. Blocking.")
             return None
 
-        # 2. Calculate the absolute world angle to the next hop node
         current_coords = self.nxgraph.nodes[self.current_node]
         next_hop_coords = self.nxgraph.nodes[next_hop_node]
         dx = next_hop_coords['x'] - current_coords['x']
         dy = next_hop_coords['y'] - current_coords['y']
-        
-        target_direction_rad = math.atan2(dx, dy)
-        absolute_target_angle = math.degrees(target_direction_rad) #(450 - math.degrees(target_direction_rad)) % 360
-        
+        target_direction_rad = math.atan2(dy, dx)
+        absolute_target_angle = (90 - math.degrees(target_direction_rad)) % 360
 
-        # 3. Convert this to a relative angle for the robot
-        relative_target_angle = (absolute_target_angle - self.current_orientation) % 360
+        # Candidate angles: nur Winkel im Graph
+        valid_angles = []
+        angle_margin = 30  # zum Beispiel ±20°
 
-        # 4. Find the detected camera angle that is closest to our ideal relative angle
-        best_angle_choice = None
+        for neighbor in self.nxgraph.neighbors(self.current_node):
+            neighbor_coords = self.nxgraph.nodes[neighbor]
+            ndx = neighbor_coords['x'] - current_coords['x']
+            ndy = neighbor_coords['y'] - current_coords['y']
+            neighbor_dir_rad = math.atan2(ndy, ndx)
+            neighbor_dir_deg = (90 - math.degrees(neighbor_dir_rad)) % 360
+            valid_angles.append(neighbor_dir_deg)
+
+        self.logger.info(f"Allowed angles from graph neighbors: {valid_angles}")
+
+        # Jetzt nur Kamera-Winkel nehmen, die in diesem Bereich liegen
+        filtered = []
+        for cam_angle in detected_angles:
+            for va in valid_angles:
+                diff = abs((cam_angle - va + 180) % 360 - 180)
+                if diff <= angle_margin:
+                    filtered.append(cam_angle)
+                    break  # reicht wenn ein Treffer
+
+        if not filtered:
+            self.logger.warning("No camera angles matched graph directions within margin, blocking.")
+            return None
+
+        # unter den gefilterten weiterhin den mit kleinstem Unterschied zur Zielrichtung nehmen
+        best_angle = None
         smallest_diff = float('inf')
-        self.logger.debug(f"Robot at {self.current_orientation:.1f}°. Needs to face {absolute_target_angle:.1f}°. Relative turn needed: {relative_target_angle:.1f}°")
-
-        for angle in detected_angles:
-            diff = abs(angle - relative_target_angle)
+        for angle in filtered:
+            absolute_cam_angle = (self.current_orientation + angle) % 360
+            diff = abs((absolute_cam_angle - absolute_target_angle + 180) % 360 - 180)
             if diff < smallest_diff:
                 smallest_diff = diff
-                best_angle_choice = angle
+                best_angle = angle
 
-        if best_angle_choice is not None:
-             self.logger.info(f"Best camera angle for next hop is {best_angle_choice}° (diff to ideal: {smallest_diff:.1f}°)")
-        else:
-             self.logger.error("No angle found that matches path.")
+        self.logger.info(f"Chosen filtered angle: {best_angle}° (diff to ideal: {smallest_diff:.1f}°)")
+        return best_angle
 
-        return best_angle_choice
     
     def print_graph(self):
         print("=== Graph Summary ===")
