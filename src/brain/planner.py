@@ -598,11 +598,11 @@ class PathPlanner:
             dy = neighbor_coords['y'] - prev_coords['y']
             
             # atan2(dy, dx) gives angle from +X axis (East). We convert to our system (0° is +Y).
-            expected_direction_rad = math.atan2(dy, dx)
-            expected_direction_deg = (450 - math.degrees(expected_direction_rad)) % 360
+            expected_direction_rad = math.atan2(dx, dy)
+            expected_direction_deg = math.degrees(expected_direction_rad)
 
             # Calculate the smallest difference between the robot's travel direction and the expected direction
-            diff = 180 - abs(abs(travel_direction - expected_direction_deg) - 180)
+            diff = abs(travel_direction - expected_direction_deg)
 
             self.logger.debug(f"Inferring from '{previous_node_id}': Travel_dir={travel_direction:.1f}°. Neighbor '{neighbor_id}' expected_dir={expected_direction_deg:.1f}°. Diff={diff:.1f}°")
 
