@@ -91,7 +91,7 @@ class PathPlanner:
         lidar = sensor_data.get("lidar", (None, None, None))
         dist_cm, flux, _ = lidar
         
-        self.logger.info(f"[PLANNER] next_action called with persisted angles: {self.angles}, lidar: {lidar}")
+        self.logger.debug(f"[PLANNER] next_action called with persisted angles: {self.angles}, lidar: {lidar}")
         self._process_inbound_data(inbound_data)
 
         match self.state:
@@ -103,11 +103,11 @@ class PathPlanner:
             case NavState.TRAVELING_EDGE:
                 if self.node_detected_signal:
                     if self.angles:
-                        self.logger.info(f"Node detected with angles: {self.angles}. Stopping and proceeding.")
+                        self.logger.info(f"[PLANNER] Node detected with angles: {self.angles}. Stopping and proceeding.")
                         self.state = NavState.ARRIVED_AT_NODE
                         return None, self.current_node
                     else:
-                        self.logger.info("Node detected, but no angles yet. Starting wait timer...")
+                        self.logger.info("[PLANNER] Node detected, but no angles yet. Starting wait timer...")
                         self.state = NavState.WAITING_FOR_ANGLES
                         self.wait_for_angles_start_time = time.time()
                 return None, self.current_node
@@ -124,16 +124,16 @@ class PathPlanner:
                 return None, self.current_node
 
             case NavState.RETRY_CAPTURE:
-                self.logger.info("Performing retry sequence...")
+                self.logger.info("PLANNER] Performing retry sequence...")
 
                 new_angles = self._take_and_process_snapshot()
 
                 if new_angles:
-                    self.logger.info(f"Retry successful. New angles: {new_angles}")
+                    self.logger.info(f"PLANNER] Retry successful. New angles: {new_angles}")
                     self.angles = new_angles
                     self.state = NavState.ARRIVED_AT_NODE
                 else:
-                    self.logger.error("Retry failed to produce angles. Entering BLOCKED state.")
+                    self.logger.error("PLANNER] Retry failed to produce angles. Entering BLOCKED state.")
                     self.state = NavState.BLOCKED
                     return encode_stop(Address.MOTION_CTRL), self.current_node
                 
@@ -148,22 +148,25 @@ class PathPlanner:
                     # This should only happen at the very beginning
                     self.node_stack.append("S")
                     self.current_node = "S"
-                    self.logger.info("Initialized at START node 'S'.")
+                    self.logger.info("PLANNER] Initialized at START node 'S'.")
+                    self.logger.info(f"[PLANNER] Current node: {self.current_node}")
                 else:
                     # We have arrived at a new node. Infer which one it is.
                     self._infer_and_update_current_node()
+                    self.logger.info(f"[PLANNER] Current node: {self.current_node}")
+
                     
                 if self.state == NavState.BLOCKED:
-                    return encode_stop(Address.MOTION_CTRL), "UNKNOWN"
+                    return encode_stop(Address.MOTION_CTRL), self.current_node
 
-                self.logger.info(f"Node stack is now: {self.node_stack}")
+                self.logger.info(f"PLANNER] Node stack is now: {self.node_stack}")
                 
                 if self.current_node == self.target_node:
-                     img = self.capture_img()
-                     if self.goal_reached(img): # Double-check with OCR
-                         self.state = NavState.GOAL_REACHED
-                         self.buzzer.play_goal()
-                         return encode_stop(Address.MOTION_CTRL), self.current_node
+                    img = self.capture_img()
+                    self.goal_reached(img)
+                    self.state = NavState.GOAL_REACHED
+                    self.buzzer.play_goal()
+                    return encode_stop(Address.MOTION_CTRL), self.current_node
                 
                 self.state = NavState.DECIDING_NEXT_ANGLE
                 return None, self.current_node
@@ -486,6 +489,32 @@ class PathPlanner:
                 break 
 
         self.logger.warning(f"Timeout! 'InfoFlag.ACK' nicht innerhalb von {timeout} Sekunden empfangen.")
+        return False
+    
+    def await_line_poll(self, timeout: float = 2.0) -> bool:
+        """
+        Wartet auf eine Antwort vom Line Sensor Poll.
+        Returns True if the robot is on a line, False otherwise.
+        """
+        self.logger.info(f"Warte auf Line Poll (Timeout: {timeout}s)")
+        start_time = time.time()
+
+        while time.time() - start_time < timeout:
+            try:
+                inbound_frame = self.uart_manager.line_poll_queue.get_nowait()
+                decoder = Decoder(inbound_frame)
+                params = decoder.get_params()
+                if decoder.command == Command.RESPONSE and params.poll_id == PollId.LINE_SENSOR.value:
+                    self.logger.info("Line sensor poll received. Success!")
+                    return True
+            except Empty:
+                time.sleep(0.05)
+                continue
+            except Exception as e:
+                self.logger.error(f"Unerwarteter Fehler beim Holen aus der line_poll_queue: {e}")
+                break 
+
+        self.logger.warning(f"Timeout! Line sensor poll nicht innerhalb von {timeout} Sekunden empfangen.")
         return False
     
     def _take_and_process_snapshot(self) -> list[int]:

@@ -86,7 +86,6 @@ class CameraSource(VideoSource):
     def start(self):
         self.__camera.post_callback = self.__frame_callback
         self.__camera.start()
-        self.__log.info("PiCamera2 started. test")
         if not self.__wait_for_startup():
             self.stop()
             raise RuntimeError("Camera failed to deliver frame in time.")

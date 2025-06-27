@@ -41,20 +41,16 @@ class UartManager:
                         params = decoder.get_params()
                         if decoder.command == Command.INFO and params.flag == InfoFlag.ACK.value:
                             self.ack_queue.put(frame)
-                            print(f"[MANAGER]: ACK frame routed to ack_queue.")
                         elif (decoder.command == Command.INFO and params.flag == InfoFlag.LOST_LINE.value) or \
                             (decoder.command == Command.RESPONSE and params.poll_id == PollId.LINE_SENSOR.value):
                             self.line_poll_queue.put(frame)
-                            print(f"[MANAGER]: Line poll frame routed to line_poll_queue.")
                         else:
-                            print(f"[MANAGER]: Frame received with command: {decoder.command.name}")
                             self.rx_queue.put(frame)
                     except Exception as e:
-                        print(f"[MANAGER]: Error while sorting frame, putting in default queue: {e}")
                         self.rx_queue.put(frame)
                     
-                    print(f"[MANAGER]: _reader_loop received frame!")
-                    frame_debug(frame)
+                    # print(f"[MANAGER]: _reader_loop received frame!")
+                    # frame_debug(frame)
 
             except Exception as e:
                 print(f"[MANAGER]: _reader_loop encountered an error: {e}")
@@ -64,8 +60,8 @@ class UartManager:
             try:
                 frame = self.tx_queue.get(timeout=0.05)
                 self._uart.send_frame(frame)
-                print(f"[MANAGER]: _writer_loop sent frame!")
-                frame_debug(frame)
+                # print(f"[MANAGER]: _writer_loop sent frame!")
+                # frame_debug(frame)
             except Empty:
                 continue
             except Exception as e:
