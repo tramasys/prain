@@ -20,9 +20,7 @@ class HighLevelController:
         self.lidar = LidarSensor(bus=lidar_bus, address=lidar_address)
         self.lamp = GPIOLamp(pin=27)
 
-        self.graph = Graph()
         self.planner = PathPlanner(
-            graph=self.graph,
             target_node=target_node,
             logger=logger,
             manager=self.uart_manager,

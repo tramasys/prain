@@ -1,119 +1,80 @@
+# In prain/src/brain/graph.py
+
+import json
+from typing import Dict, List, Any, Optional
+
 class Graph:
-    def __init__(self):
+    """
+    Repräsentiert den statischen Navigationsgraphen des Roboters.
+    Diese Klasse lädt die Graphendaten aus einer JSON-Datei und stellt
+    eine Schnittstelle zur Abfrage von Knoten, Kanten und deren Eigenschaften bereit.
+    """
+    def __init__(self, file_path: str):
         """
-        Create the default adjacency dict for the known nodes and edges.
-        Keys are node IDs (strings); values are dicts mapping neighbor -> bool (traversable?).
+        Initialisiert und lädt den Graphen aus der angegebenen JSON-Datei.
+        
+        Args:
+            file_path (str): Der Pfad zur graph_data.json Datei.
         """
-        self._graph = {
-            "S": {
-                "1": {"traversable": True, "distance": float("inf")},
-                "2": {"traversable": True, "distance": float("inf")},
-                "3": {"traversable": True, "distance": float("inf")}
-            },
-            "1": {
-                "S": {"traversable": True, "distance": float("inf")},
-                "2": {"traversable": True, "distance": float("inf")},
-                "A": {"traversable": True, "distance": float("inf")}
-            },
-            "2": {
-                "S": {"traversable": True, "distance": float("inf")},
-                "1": {"traversable": True, "distance": float("inf")},
-                "3": {"traversable": True, "distance": float("inf")},
-                "4": {"traversable": True, "distance": float("inf")},
-                "A": {"traversable": True, "distance": float("inf")}
-            },
-            "3": {
-                "S": {"traversable": True, "distance": float("inf")},
-                "2": {"traversable": True, "distance": float("inf")},
-                "4": {"traversable": True, "distance": float("inf")},
-                "C": {"traversable": True, "distance": float("inf")}
-            },
-            "4": {
-                "2": {"traversable": True, "distance": float("inf")},
-                "3": {"traversable": True, "distance": float("inf")},
-                "A": {"traversable": True, "distance": float("inf")},
-                "B": {"traversable": True, "distance": float("inf")},
-                "C": {"traversable": True, "distance": float("inf")}
-            },
-            "A": {
-                "1": {"traversable": True, "distance": float("inf")},
-                "2": {"traversable": True, "distance": float("inf")},
-                "4": {"traversable": True, "distance": float("inf")},
-                "B": {"traversable": True, "distance": float("inf")}
-            },
-            "B": {
-                "A": {"traversable": True, "distance": float("inf")},
-                "4": {"traversable": True, "distance": float("inf")},
-                "C": {"traversable": True, "distance": float("inf")}
-            },
-            "C": {
-                "3": {"traversable": True, "distance": float("inf")},
-                "4": {"traversable": True, "distance": float("inf")},
-                "B": {"traversable": True, "distance": float("inf")}
-            }
-        }
-        self._goal_vectors = {"A": True, "B": True, "C": True}
-        self._blocked_nodes = {node: False for node in self._graph}
-        self.node_sections = {
-            "S": "middle", "1": "right", "2": "middle", "3": "left",
-            "4": "middle", "A": "right", "B": "middle", "C": "left"
-        }
+        self.file_path = file_path
+        self._graph_data = self._load_from_json()
+        self._validate_graph_data()
+        
+        # Adjazenzliste für einfachen Zugriff auf Nachbarn
+        self._adjacency_list = self._build_adjacency_list()
 
-    def set_edge_traversable(self, node1: str, node2: str, traversable: bool) -> None:
-        """Mark the edge node1 <-> node2 as traversable or blocked."""
-        if node1 in self._graph and node2 in self._graph[node1]:
-            self._graph[node1][node2]["traversable"] = traversable
-        if node2 in self._graph and node1 in self._graph[node2]:
-            self._graph[node2][node1]["traversable"] = traversable
+    def _load_from_json(self) -> Dict[str, Any]:
+        """Lädt die Graphendaten aus der JSON-Datei."""
+        try:
+            with open(self.file_path, 'r') as f:
+                data = json.load(f)
+                return data
+        except FileNotFoundError:
+            print(f"ERROR: Graph file not found at {self.file_path}")
+            return {}
+        except json.JSONDecodeError:
+            print(f"ERROR: Could not decode JSON from {self.file_path}")
+            return {}
 
-    def is_edge_traversable(self, node1: str, node2: str) -> bool:
-        """Return True if node1 <-> node2 is currently traversable."""
-        if node1 in self._graph and node2 in self._graph[node1]:
-            return self._graph[node1][node2].get("traversable", False)
-        return False
-    
-    def set_edge_distance(self, node1: str, node2: str, distance: float) -> None:
-        if node1 in self._graph and node2 in self._graph[node1]:
-            self._graph[node1][node2]["distance"] = distance
-        if node2 in self._graph and node1 in self._graph[node2]:
-            self._graph[node2][node1]["distance"] = distance  # symmetrisch
+    def _validate_graph_data(self):
+        """Stellt sicher, dass die geladenen Daten 'nodes' und 'edges' enthalten."""
+        if 'nodes' not in self._graph_data or 'edges' not in self._graph_data:
+            raise ValueError("Invalid graph file: Must contain 'nodes' and 'edges' keys.")
 
-    def get_edge_distance(self, node1: str, node2: str) -> float:
-        if node1 in self._graph and node2 in self._graph[node1]:
-            return self._graph[node1][node2].get("distance", float("inf"))
-        return float("inf")
+    def _build_adjacency_list(self) -> Dict[str, Dict[str, Any]]:
+        """Erstellt eine Adjazenzliste aus den Kantendaten für schnellen Zugriff."""
+        adj = {node['id']: {} for node in self._graph_data.get('nodes', [])}
+        for edge in self._graph_data.get('edges', []):
+            u, v = edge['source'], edge['target']
+            # Füge Kante in beide Richtungen hinzu, falls nicht gerichtet
+            adj[u][v] = edge
+            adj[v][u] = edge # Annahme: Kanten sind bidirektional
+        return adj
 
-    def remove_edge(self, node1: str, node2: str) -> None:
-        """Completely remove the edge from the graph."""
-        if node1 in self._graph and node2 in self._graph[node1]:
-            del self._graph[node1][node2]
-        if node2 in self._graph and node1 in self._graph[node2]:
-            del self._graph[node2][node1]
+    def get_adjacency(self) -> Dict[str, Dict[str, Any]]:
+        """Gibt die komplette Adjazenzliste des Graphen zurück."""
+        return self._adjacency_list
+        
+    def get_nodes(self) -> List[Dict[str, Any]]:
+        """Gibt eine Liste aller Knoten im Graphen zurück."""
+        return self._graph_data.get('nodes', [])
 
-    def get_neighbors(self, node: str) -> dict[str, bool]:
-        """Return a dict of neighbor -> traversable-boolean for the given node."""
-        return self._graph.get(node, {})
+    def get_node(self, node_id: str) -> Optional[Dict[str, Any]]:
+        """Gibt die Daten für einen spezifischen Knoten zurück."""
+        for node in self.get_nodes():
+            if node['id'] == node_id:
+                return node
+        return None
 
-    def nodes(self):
-        """Return a list of all node IDs in the graph."""
-        return list(self._graph.keys())
+    def get_neighbors(self, node_id: str) -> List[str]:
+        """Gibt eine Liste der IDs der Nachbarknoten zurück."""
+        return list(self._adjacency_list.get(node_id, {}).keys())
 
-    def get_adjacency(self) -> dict[str, dict[str, bool]]:
-        """Return the entire adjacency structure."""
-        return self._graph
-
-    def set_node_blocked(self, node: str, blocked: bool) -> None:
-        """Mark a node as blocked (e.g., by a pylon) or unblocked."""
-        if node in self._blocked_nodes:
-            self._blocked_nodes[node] = blocked
-
-    def is_node_blocked(self, node: str) -> bool:
-        """Return True if the node is blocked (e.g., by a pylon)."""
-        return self._blocked_nodes.get(node, False)
-
-    def get_node_section(self, node: str) -> str:
-        """Return the section ('left', 'middle', 'right') for a given node."""
-        return self.node_sections.get(node, "middle")  # Default to "middle" if unknown
-
-    def __repr__(self):
-        return f"Graph(adjacency={self._graph}, blocked_nodes={self._blocked_nodes}, sections={self.node_sections})"
+    def is_edge_traversable(self, source_node: str, target_node: str) -> bool:
+        """
+        Prüft, ob eine Kante existiert und traversierbar ist.
+        Hier könnte zukünftig Logik für blockierte Kanten rein.
+        """
+        if source_node not in self._adjacency_list:
+            return False
+        return target_node in self._adjacency_list[source_node]
