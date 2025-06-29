@@ -9,6 +9,7 @@ import os
 import uuid
 import cv2
 import json
+import sys
 
 from prain_uart import *
 from brain.graph import Graph
@@ -73,7 +74,7 @@ class PathPlanner:
         self.camera = camera
 
         self.wait_for_angles_start_time = None
-        self.wait_for_angles_timeout = 3.0
+        self.wait_for_angles_timeout = 5.0
         
         # Scoring constants
         self.SECTION_BOOST = 3
@@ -128,14 +129,9 @@ class PathPlanner:
 
                 new_angles = self._take_and_process_snapshot()
 
-                if new_angles:
-                    self.logger.info(f"PLANNER] Retry successful. New angles: {new_angles}")
-                    self.angles = new_angles
-                    self.state = NavState.ARRIVED_AT_NODE
-                else:
-                    self.logger.error("PLANNER] Retry failed to produce angles. Entering BLOCKED state.")
-                    self.state = NavState.BLOCKED
-                    return encode_stop(Address.MOTION_CTRL), self.current_node
+                self.logger.info(f"PLANNER] Retry successful. New angles: {new_angles}")
+                self.angles = new_angles
+                self.state = NavState.ARRIVED_AT_NODE
                 
                 return None, self.current_node
 
@@ -174,14 +170,21 @@ class PathPlanner:
             case NavState.DECIDING_NEXT_ANGLE:
                 self.logger.info("[PLANNER] DECIDING_NEXT_ANGLE state reached")
 
+                angles_from_graph = False
                 if not self.angles:
-                    self.state = NavState.BLOCKED
-                    return encode_stop(Address.MOTION_CTRL), self.current_node
+                    self.angles = self._get_graph_angles_at(self.current_node)
+                    angles_from_graph = True
+                    # self.state = NavState.BLOCKED
+                    # return encode_stop(Address.MOTION_CTRL), self.current_node
                 
                 angle_choice = self._choose_best_direction(self.angles)
-                if angle_choice is None:
+                if angle_choice is None and angles_from_graph:
                     self.state = NavState.BLOCKED
                     return encode_stop(Address.MOTION_CTRL), self.current_node
+                elif angle_choice is None:
+                    # take angles from graph in next iteration
+                    self.angles = []
+                    return None, self.current_node
 
                 self.logger.info(f"[PLANNER] Chose angle: {angle_choice} from {self.angles}")
                 turn_amount = (360 - angle_choice if angle_choice > 180 else -angle_choice) * 10
@@ -200,6 +203,8 @@ class PathPlanner:
                 if not line_found:
                     if self.last_chosen_angle in self.angles:
                         self.angles.remove(self.last_chosen_angle)
+                    next_node = self._infer_next_node()
+                    self.nxgraph.remove_edge(self.current_node, next_node)
                     self.logger.info(f"[PLANNER] No line found after turning {self.last_chosen_angle}°")
                     self._update_orientation(-self.last_chosen_angle)
                     self.last_chosen_angle = None
@@ -572,17 +577,30 @@ class PathPlanner:
             G.add_node(node_id, x=x, y=y)
 
         for edge in data.get('edges', []):
-            if 'from' in edge and 'to' in edge:
-                G.add_edge(edge['from'], edge['to'])
-        
-        self.logger.info(f"Graph loaded successfully with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges.")
+            node_from = edge.get('from')
+            node_to = edge.get('to')
+            
+            # Ensure both nodes exist in the graph before trying to connect them
+            if node_from and node_to and G.has_node(node_from) and G.has_node(node_to):
+                # Get the coordinates that are already stored in the nodes
+                pos_from = G.nodes[node_from]
+                pos_to = G.nodes[node_to]
+                
+                # Calculate the Euclidean distance between the two nodes
+                distance = math.hypot(pos_from['x'] - pos_to['x'], pos_from['y'] - pos_to['y'])
+                
+                # Add the edge with the calculated distance as its weight
+                G.add_edge(node_from, node_to, weight=distance)
+                self.logger.debug(f"Added edge {node_from}-{node_to} with weight {distance:.2f}")
+
+        self.logger.info(f"Graph loaded successfully with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges (with distance weights).")
         return G
 
     def get_node_coordinates(self, node_id: str):
         # Greift auf die Daten zu, die im Graphen selbst gespeichert sind
         return self.nxgraph.nodes[node_id]['x'], self.nxgraph.nodes[node_id]['y']
     
-    def _infer_and_update_current_node(self, tolerance_degrees: float = 10.0):
+    def _infer_and_update_current_node(self, tolerance_degrees: float = 15.0):
         """
         Infers the current node based on the last known node and the travel angle.
         This is the heart of the graph-based localization.
@@ -622,8 +640,6 @@ class PathPlanner:
             if diff < smallest_angle_diff:
                 smallest_angle_diff = diff
                 best_match_node = neighbor_id
-                
-
 
         if best_match_node and smallest_angle_diff <= tolerance_degrees:
             self.current_node = best_match_node
@@ -693,7 +709,7 @@ class PathPlanner:
             
     def _choose_best_direction(self, detected_angles: list[int]) -> int | None:
         try:
-            path = nx.shortest_path(self.nxgraph, source=self.current_node, target=self.target_node)
+            path = nx.shortest_path(self.nxgraph, source=self.current_node, target=self.target_node, weight='weight')
             if len(path) < 2:
                 self.logger.warning(f"Already at target or no path found. Path: {path}")
                 return None
@@ -749,7 +765,43 @@ class PathPlanner:
 
         self.logger.info(f"Chosen filtered angle: {best_angle}° (diff to ideal: {smallest_diff:.1f}°)")
         return best_angle
+    
+    def _get_graph_angles_at(self, node_id: str) -> list[int]:
+        """
+        Gibt die Winkel zu allen Nachbarknoten von `node_id` zurück,
+        in der Kameraperspektive (0° = vorwärts), angepasst an die aktuelle Orientierung
+        des Roboters.
 
+        Returns:
+            list[int]: eine Liste der relativen Winkel in Grad (0–360) für die Kamera.
+        """
+        current_coords = self.nxgraph.nodes[node_id]
+        neighbors = list(self.nxgraph.neighbors(node_id))
+        
+        camera_angles = []
+
+        for neighbor_id in neighbors:
+            neighbor_coords = self.nxgraph.nodes[neighbor_id]
+            dx = neighbor_coords['x'] - current_coords['x']
+            dy = neighbor_coords['y'] - current_coords['y']
+
+            # Richtung in Weltkoordinaten
+            direction_rad = math.atan2(dy, dx)
+            world_angle_deg = (90 - math.degrees(direction_rad)) % 360
+
+            # in Kamerasystem transformieren
+            # 0° Kamera = Roboter-Front
+            relative_camera_angle = (world_angle_deg - self.current_orientation) % 360
+
+            self.logger.debug(
+                f"[PLANNER] Graph angle to neighbor {neighbor_id}: world={world_angle_deg:.1f}°, "
+                f"camera-relative={relative_camera_angle:.1f}° "
+                f"(robot_orientation={self.current_orientation}°)"
+            )
+            
+            camera_angles.append(int(relative_camera_angle))
+
+        return camera_angles
     
     def print_graph(self):
         print("=== Graph Summary ===")
