@@ -67,4 +67,4 @@ def _save_graph():
         json.dump(graph, f, indent=2)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, port=5001)
