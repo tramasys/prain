@@ -174,11 +174,14 @@ class PathPlanner:
                 if not self.angles:
                     self.angles = self._get_graph_angles_at(self.current_node)
                     angles_from_graph = True
+                    self.logger.info(f'chosen anlges from graph')
                     # self.state = NavState.BLOCKED
                     # return encode_stop(Address.MOTION_CTRL), self.current_node
                 
                 angle_choice = self._choose_best_direction(self.angles)
+                self.logger.info(f'angles_from_graph: {angles_from_graph}, angle_choice: {angle_choice}, self.angles: {self.angles}')
                 if angle_choice is None and angles_from_graph:
+                    self.logger.info(f'Blocked due to None angle_choice and angles from graph')
                     self.state = NavState.BLOCKED
                     return encode_stop(Address.MOTION_CTRL), self.current_node
                 elif angle_choice is None:
@@ -600,7 +603,7 @@ class PathPlanner:
         # Greift auf die Daten zu, die im Graphen selbst gespeichert sind
         return self.nxgraph.nodes[node_id]['x'], self.nxgraph.nodes[node_id]['y']
     
-    def _infer_and_update_current_node(self, tolerance_degrees: float = 15.0):
+    def _infer_and_update_current_node(self, tolerance_degrees: float = 40.0):
         """
         Infers the current node based on the last known node and the travel angle.
         This is the heart of the graph-based localization.
@@ -649,7 +652,7 @@ class PathPlanner:
             self.state = NavState.BLOCKED
             self.logger.error(f"FAILURE: Could not infer destination. Best match '{best_match_node}' was off by {smallest_angle_diff:.1f}°. Blocking.")
             
-    def _infer_next_node(self, tolerance_degrees: float = 15.0):
+    def _infer_next_node(self, tolerance_degrees: float = 40.0):
         """
         Bestimmt den nächsten Knoten basierend auf dem gewählten Kamerawinkel und der aktuellen Ausrichtung.
 
@@ -736,15 +739,18 @@ class PathPlanner:
             ndy = neighbor_coords['y'] - current_coords['y']
             neighbor_dir_rad = math.atan2(ndy, ndx)
             neighbor_dir_deg = (90 - math.degrees(neighbor_dir_rad)) % 360
+            neighbor_dir_deg = (self.current_orientation + neighbor_dir_deg) % 360
             valid_angles.append(neighbor_dir_deg)
 
         self.logger.info(f"Allowed angles from graph neighbors: {valid_angles}")
 
         # Jetzt nur Kamera-Winkel nehmen, die in diesem Bereich liegen
         filtered = []
+        self.logger.info(f'deteced_angles: {detected_angles}, valid_angles: {valid_angles}')
         for cam_angle in detected_angles:
             for va in valid_angles:
                 diff = abs((cam_angle - va + 180) % 360 - 180)
+                self.logger.info(f'diff: {diff}')
                 if diff <= angle_margin:
                     filtered.append(cam_angle)
                     break  # reicht wenn ein Treffer
