@@ -739,7 +739,7 @@ class PathPlanner:
             ndy = neighbor_coords['y'] - current_coords['y']
             neighbor_dir_rad = math.atan2(ndy, ndx)
             neighbor_dir_deg = (90 - math.degrees(neighbor_dir_rad)) % 360
-            neighbor_dir_deg = (self.current_orientation + neighbor_dir_deg) % 360
+            neighbor_dir_deg = (neighbor_dir_deg - self.current_orientation) % 360
             valid_angles.append(neighbor_dir_deg)
 
         self.logger.info(f"Allowed angles from graph neighbors: {valid_angles}")
